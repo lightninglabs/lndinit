@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	defaultK8sNamespace = "default"
+	defaultK8sNamespace      = "default"
+	defaultK8sResourcePolicy = "keep"
 )
 
 type k8sSecretOptions struct {
@@ -28,9 +29,39 @@ func (s *k8sSecretOptions) AnySet() bool {
 		s.SecretKeyName != ""
 }
 
+type helmOptions struct {
+	Annotate       bool   `long:"annotate" description:"Whether Helm annotations should be added to the created secret"`
+	ReleaseName    string `long:"release-name" description:"The value for the meta.helm.sh/release-name annotation"`
+	ResourcePolicy string `long:"resource-policy" description:"The value for the helm.sh/resource-policy annotation"`
+}
+
 type jsonK8sObject struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
+}
+
+func saveK8s(content string, opts *k8sSecretOptions, overwrite bool,
+	helm *helmOptions) error {
+
+	client, err := getClientK8s()
+	if err != nil {
+		return err
+	}
+
+	secret, exists, err := getSecretK8s(
+		client, opts.Namespace, opts.SecretName,
+	)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		return updateSecretValueK8s(
+			client, secret, opts, overwrite, content,
+		)
+	}
+
+	return createSecretK8s(client, opts, helm, content)
 }
 
 func readK8s(opts *k8sSecretOptions) (string, *jsonK8sObject, error) {
@@ -124,4 +155,91 @@ func getSecretK8s(client *kubernetes.Clientset, namespace,
 		return nil, false, fmt.Errorf("error querying secret "+
 			"existence: %v", err)
 	}
+}
+
+func updateSecretValueK8s(client *kubernetes.Clientset, secret *api.Secret,
+	opts *k8sSecretOptions, overwrite bool, content string) error {
+
+	if len(secret.Data) == 0 {
+		log("Data of secret %s is empty, initializing", opts.SecretName)
+		secret.Data = make(map[string][]byte)
+	}
+
+	if len(secret.Data[opts.SecretKeyName]) > 0 && !overwrite {
+		return fmt.Errorf("key %s in secret %s already exists: %v",
+			opts.SecretKeyName, opts.SecretName,
+			errTargetExists)
+	}
+
+	// Do we need to add an extra layer of base64?
+	if opts.Base64 {
+		content = base64.StdEncoding.EncodeToString([]byte(content))
+	}
+	secret.Data[opts.SecretKeyName] = []byte(content)
+
+	log("Attempting to update key %s of secret %s in namespace %s",
+		opts.SecretKeyName, opts.SecretName, opts.Namespace)
+	updatedSecret, err := client.CoreV1().Secrets(opts.Namespace).Update(
+		context.Background(), secret, metav1.UpdateOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("error updating secret %s in namespace %s: "+
+			"%v", opts.SecretName, opts.Namespace, err)
+	}
+
+	jsonSecret, _ := asJSON(jsonK8sObject{
+		TypeMeta:   updatedSecret.TypeMeta,
+		ObjectMeta: updatedSecret.ObjectMeta,
+	})
+	log("Updated secret: %s", jsonSecret)
+
+	return nil
+}
+
+func createSecretK8s(client *kubernetes.Clientset, opts *k8sSecretOptions,
+	helm *helmOptions, content string) error {
+
+	meta := metav1.ObjectMeta{
+		Name: opts.SecretName,
+	}
+
+	if helm != nil && helm.Annotate {
+		meta.Labels = map[string]string{
+			"app.kubernetes.io/managed-by": "Helm",
+		}
+		meta.Annotations = map[string]string{
+			"helm.sh/resource-policy":        helm.ResourcePolicy,
+			"meta.helm.sh/release-name":      helm.ReleaseName,
+			"meta.helm.sh/release-namespace": opts.Namespace,
+		}
+	}
+
+	// Do we need to add an extra layer of base64?
+	if opts.Base64 {
+		content = base64.StdEncoding.EncodeToString([]byte(content))
+	}
+
+	newSecret := &api.Secret{
+		Type:       api.SecretTypeOpaque,
+		ObjectMeta: meta,
+		Data: map[string][]byte{
+			opts.SecretKeyName: []byte(content),
+		},
+	}
+
+	updatedSecret, err := client.CoreV1().Secrets(opts.Namespace).Create(
+		context.Background(), newSecret, metav1.CreateOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("error creating secret %s in namespace %s: "+
+			"%v", opts.SecretName, opts.Namespace, err)
+	}
+
+	jsonSecret, _ := asJSON(jsonK8sObject{
+		TypeMeta:   updatedSecret.TypeMeta,
+		ObjectMeta: updatedSecret.ObjectMeta,
+	})
+	log("Created secret: %s", jsonSecret)
+
+	return nil
 }

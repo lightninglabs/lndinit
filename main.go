@@ -22,6 +22,8 @@ const (
 	outputFormatRaw  = "raw"
 	outputFormatJSON = "json"
 
+	storageK8s = "k8s"
+
 	errTargetExists = "target exists error"
 	errInputMissing = "input missing error"
 )
@@ -108,6 +110,7 @@ func registerCommands(parser *flags.Parser) error {
 	commands := []subCommand{
 		newGenPasswordCommand(),
 		newGenSeedCommand(),
+		newStoreSecretCommand(),
 	}
 
 	for _, command := range commands {
