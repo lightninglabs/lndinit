@@ -26,6 +26,9 @@ const (
 
 	errTargetExists = "target exists error"
 	errInputMissing = "input missing error"
+
+	defaultRPCPort   = "10009"
+	defaultRPCServer = "localhost:" + defaultRPCPort
 )
 
 var (
@@ -112,6 +115,7 @@ func registerCommands(parser *flags.Parser) error {
 		newGenSeedCommand(),
 		newLoadSecretCommand(),
 		newStoreSecretCommand(),
+		newWaitReadyCommand(),
 	}
 
 	for _, command := range commands {
