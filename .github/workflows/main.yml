@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "master"
+  pull_request:
+    branches:
+      - "*"
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # go needs absolute directories, using the $HOME variable doesn't work here.
+  GOCACHE: /home/runner/work/go/pkg/build
+  GOPATH: /home/runner/work/go
+
+jobs:
+  ########################
+  # lint code
+  ########################
+  lint:
+    name: lint code
+    runs-on: ubuntu-latest
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: lint
+        run: make lint
