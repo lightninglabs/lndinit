@@ -27,6 +27,8 @@ _testmain.go
 /lndinit
 /lndinit-debug
 
+lndinit-v*/
+
 *.key
 *.hex
 

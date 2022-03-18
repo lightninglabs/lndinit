@@ -20,6 +20,29 @@ CP := cp
 MAKE := make
 XARGS := xargs -L 1
 
+VERSION_TAG = $(shell git describe --tags)
+
+BUILD_SYSTEM = darwin-amd64 \
+linux-386 \
+linux-amd64 \
+linux-armv6 \
+linux-armv7 \
+linux-arm64 \
+windows-386 \
+windows-amd64 \
+windows-arm
+
+# By default we will build all systems. But with the 'sys' tag, a specific
+# system can be specified. This is useful to release for a subset of
+# systems/architectures.
+ifneq ($(sys),)
+BUILD_SYSTEM = $(sys)
+endif
+
+ifneq ($(tag),)
+VERSION_TAG = $(tag)
+endif
+
 # We only return the part inside the double quote here to avoid escape issues
 # when calling the external release script. The second parameter can be used to
 # add additional ldflags if needed (currently only used for the release).
@@ -28,7 +51,6 @@ make_ldflags = $(2) -X $(PKG).Commit=$(COMMIT)
 DEV_GCFLAGS := -gcflags "all=-N -l"
 LDFLAGS := -ldflags "$(call make_ldflags, ${tags}, -s -w)"
 DEV_LDFLAGS := -ldflags "$(call make_ldflags, $(DEV_TAGS))"
-ITEST_LDFLAGS := -ldflags "$(call make_ldflags, $(ITEST_TAGS))"
 
 # For the release, we want to remove the symbol table and debug information (-s)
 # and omit the DWARF symbol table (-w). Also we clear the build ID.
@@ -66,6 +88,10 @@ install:
 release-install:
 	@$(call print, "Installing release lndinit.")
 	env CGO_ENABLED=0 $(GOINSTALL) -v -trimpath -ldflags="$(RELEASE_LDFLAGS)" -tags="$(RELEASE_TAGS)" $(PKG)
+
+release:
+	@$(call print, "Creating release of lndinit.")
+	./release.sh build-release "$(VERSION_TAG)" "$(BUILD_SYSTEM)" "$(RELEASE_LDFLAGS)"
 
 docker-tools:
 	@$(call print, "Building tools docker image.")
