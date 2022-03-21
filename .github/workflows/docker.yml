@@ -3,7 +3,7 @@ name: Docker image build
 on:
   push:
     tags:
-      - 'v*'
+      - 'docker/v*'
 
 defaults:
   run:
@@ -30,14 +30,14 @@ jobs:
           password: ${{ secrets.DOCKER_API_KEY }}
 
       - name: Set env for RELEASE_VERSION
-        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/docker}" >> $GITHUB_ENV
 
-      # We will push tags with the format v0.x.y-lnd-v0.aa.bb-beta where x and y
-      # are lndinit's version and aa and bb are lnd's version. This variable
-      # LND_VERSION extracts everything after v0.x.y-lnd- so we know which base
-      # image we need to build on top of.
+      # We will push tags with the format docker/v0.x.y-beta-lnd-v0.aa.bb-beta
+      # where x and y are lndinit's version and aa and bb are lnd's version.
+      # This variable LND_VERSION extracts everything after v0.x.y-lnd- so we
+      # know which base image we need to build on top of.
       - name: Set env for LND_VERSION
-        run: echo "LND_VERSION=${RELEASE_VERSION##v*\.*\.*-lnd-}" >> $GITHUB_ENV
+        run: echo "LND_VERSION=${RELEASE_VERSION##v*\.*\.*-beta-lnd-}" >> $GITHUB_ENV
 
       - name: Build and push
         id: docker_build
