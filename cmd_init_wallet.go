@@ -179,6 +179,13 @@ func (x *initWalletCommand) Execute(_ []string) error {
 		}
 	}
 
+	// The seed, its passphrase and the wallet password should all never
+	// have a newline at their end, otherwise that might lead to errors
+	// further down the line.
+	seed = stripNewline(seed)
+	seedPassPhrase = stripNewline(seedPassPhrase)
+	walletPassword = stripNewline(walletPassword)
+
 	switch x.InitType {
 	case typeFile:
 		cipherSeed, err := checkSeed(seed, seedPassPhrase)
