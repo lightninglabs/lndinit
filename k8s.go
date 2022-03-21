@@ -93,13 +93,9 @@ func readK8s(opts *k8sSecretOptions) (string, *jsonK8sObject, error) {
 			opts.SecretKeyName)
 	}
 
-	// Remove any newlines at the end of the file. We won't ever write a
-	// newline ourselves but maybe the file was provisioned by another
-	// process or user.
-	content := stripNewline(string(secret.Data[opts.SecretKeyName]))
-
 	// There is an additional layer of base64 encoding applied to each of
 	// the secrets. Try to de-code it now.
+	content := string(secret.Data[opts.SecretKeyName])
 	if opts.Base64 {
 		decoded, err := base64.StdEncoding.DecodeString(content)
 		if err != nil {
@@ -108,7 +104,7 @@ func readK8s(opts *k8sSecretOptions) (string, *jsonK8sObject, error) {
 				opts.SecretKeyName, err)
 		}
 
-		content = stripNewline(string(decoded))
+		content = string(decoded)
 	}
 
 	return content, &jsonK8sObject{
