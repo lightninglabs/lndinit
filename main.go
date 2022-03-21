@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -135,11 +134,7 @@ func asJSON(resp interface{}) (string, error) {
 		return "", err
 	}
 
-	var out bytes.Buffer
-	_ = json.Indent(&out, b, "", "\t")
-	out.WriteString("\n")
-
-	return out.String(), nil
+	return string(b), nil
 }
 
 func readFile(fileName string) (string, error) {
