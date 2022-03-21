@@ -10,7 +10,7 @@ COMMIT_HASH := $(shell git rev-parse HEAD)
 
 GOBUILD := go build -v
 GOINSTALL := go install -v
-GOTEST := go test 
+GOTEST := go test -v
 DOCKER_TOOLS := docker run -v $$(pwd):/build lndinit-tools
 
 GOFILES_NOVENDOR = $(shell find . -type f -name '*.go' -not -path "./vendor/*")
@@ -102,6 +102,10 @@ scratch: build
 # =========
 # UTILITIES
 # =========
+
+unit: 
+	@$(call print, "Running unit tests.")
+	$(GOTEST) ./...
 
 fmt: $(GOIMPORTS_BIN)
 	@$(call print, "Fixing imports.")

@@ -95,16 +95,12 @@ func readK8s(opts *k8sSecretOptions) (string, *jsonK8sObject, error) {
 
 	// There is an additional layer of base64 encoding applied to each of
 	// the secrets. Try to de-code it now.
-	content := string(secret.Data[opts.SecretKeyName])
-	if opts.Base64 {
-		decoded, err := base64.StdEncoding.DecodeString(content)
-		if err != nil {
-			return "", nil, fmt.Errorf("failed to base64 decode "+
-				"secret %s key %s: %v", opts.SecretName,
-				opts.SecretKeyName, err)
-		}
-
-		content = string(decoded)
+	content, err := secretToString(
+		secret.Data[opts.SecretKeyName], opts.Base64,
+	)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to decode raw secret %s "+
+			"key %s: %v", opts.SecretName, opts.SecretKeyName, err)
 	}
 
 	return content, &jsonK8sObject{
@@ -238,4 +234,21 @@ func createSecretK8s(client *kubernetes.Clientset, opts *k8sSecretOptions,
 	log("Created secret: %s", jsonSecret)
 
 	return nil
+}
+
+// secretToString turns the raw bytes of a secret into a string, removing the
+// additional layer of base64 encoding if there is expected to be one.
+func secretToString(rawSecret []byte, doubleBase64 bool) (string, error) {
+	content := string(rawSecret)
+	if doubleBase64 {
+		decoded, err := base64.StdEncoding.DecodeString(content)
+		if err != nil {
+			return "", fmt.Errorf("failed to base64 decode: %v",
+				err)
+		}
+
+		content = string(decoded)
+	}
+
+	return content, nil
 }
