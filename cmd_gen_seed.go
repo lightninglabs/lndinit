@@ -124,7 +124,7 @@ func (x *genSeedCommand) Execute(_ []string) error {
 		}
 	}
 
-	fmt.Printf("%s\n", seedWords)
+	fmt.Printf("%s", seedWords)
 
 	return nil
 }

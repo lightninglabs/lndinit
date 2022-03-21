@@ -73,7 +73,7 @@ func (x *genPasswordCommand) Execute(_ []string) error {
 		}
 	}
 
-	fmt.Printf("%s\n", passwordString)
+	fmt.Printf("%s", passwordString)
 
 	return nil
 }
