@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -83,7 +84,7 @@ func (x *storeSecretCommand) Execute(args []string) error {
 	default:
 		log("Reading secret from stdin")
 		secret, err := bufio.NewReader(os.Stdin).ReadString('\n')
-		if err != nil {
+		if err != nil && err != io.EOF {
 			return fmt.Errorf("error reading secret from stdin: %v",
 				err)
 		}
