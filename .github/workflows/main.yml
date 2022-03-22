@@ -17,6 +17,8 @@ env:
   GOCACHE: /home/runner/work/go/pkg/build
   GOPATH: /home/runner/work/go
 
+  GO_VERSION: 1.17.6
+
 jobs:
   ########################
   # lint code
@@ -32,3 +34,32 @@ jobs:
 
       - name: lint
         run: make lint
+
+  ########################
+  # run unit tests
+  ########################
+  unit-test:
+    name: run unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v2
+
+      - name: go cache
+        uses: actions/cache@v1
+        with:
+          path: /home/runner/work/go
+          key: lnd-${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            lndinit-${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}
+            lndinit-${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ github.job }}-
+            lndinit-${{ runner.os }}-go-${{ env.GO_VERSION }}-
+            lndinit-${{ runner.os }}-go-
+
+      - name: setup go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v2
+        with:
+          go-version: '${{ env.GO_VERSION }}'
+
+      - name: run unit test
+        run: make unit

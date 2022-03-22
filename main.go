@@ -150,12 +150,7 @@ func readFile(fileName string) (string, error) {
 			err)
 	}
 
-	content := string(byteContent)
-
-	// Remove any newlines at the end of the file. We won't ever write a
-	// newline ourselves but maybe the file was provisioned by another
-	// process or user.
-	return stripNewline(content), nil
+	return string(byteContent), nil
 }
 
 func stripNewline(str string) string {

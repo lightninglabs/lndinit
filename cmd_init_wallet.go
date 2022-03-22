@@ -107,76 +107,9 @@ func (x *initWalletCommand) Execute(_ []string) error {
 	requireSeed := (x.InitType == typeFile) ||
 		(x.InitType == typeRpc && !x.InitRpc.WatchOnly)
 
-	// First find out where we want to read the secrets from.
-	var (
-		seed           string
-		seedPassPhrase string
-		walletPassword string
-		err            error
-	)
-	switch x.SecretSource {
-	// Read all secrets from individual files.
-	case storageFile:
-		if requireSeed {
-			log("Reading seed from file")
-			seed, err = readFile(x.File.Seed)
-			if err != nil {
-				return err
-			}
-		}
-
-		// The seed passphrase is optional.
-		if x.File.SeedPassphrase != "" {
-			log("Reading seed passphrase from file")
-			seedPassPhrase, err = readFile(x.File.SeedPassphrase)
-			if err != nil {
-				return err
-			}
-		}
-
-		log("Reading wallet password from file")
-		walletPassword, err = readFile(x.File.WalletPassword)
-		if err != nil {
-			return err
-		}
-
-	// Read passphrase from Kubernetes secret.
-	case storageK8s:
-		k8sSecret := &k8sSecretOptions{
-			Namespace:  x.K8s.Namespace,
-			SecretName: x.K8s.SecretName,
-			Base64:     x.K8s.Base64,
-		}
-		k8sSecret.SecretKeyName = x.K8s.SeedKeyName
-
-		if requireSeed {
-			log("Reading seed from k8s secret %s (namespace %s)",
-				x.K8s.SecretName, x.K8s.Namespace)
-			seed, _, err = readK8s(k8sSecret)
-			if err != nil {
-				return err
-			}
-		}
-
-		// The seed passphrase is optional.
-		if x.K8s.SeedPassphraseKeyName != "" {
-			log("Reading seed passphrase from k8s secret %s "+
-				"(namespace %s)", x.K8s.SecretName,
-				x.K8s.Namespace)
-			k8sSecret.SecretKeyName = x.K8s.SeedPassphraseKeyName
-			seedPassPhrase, _, err = readK8s(k8sSecret)
-			if err != nil {
-				return err
-			}
-		}
-
-		log("Reading wallet password from k8s secret %s (namespace %s)",
-			x.K8s.SecretName, x.K8s.Namespace)
-		k8sSecret.SecretKeyName = x.K8s.WalletPasswordKeyName
-		walletPassword, _, err = readK8s(k8sSecret)
-		if err != nil {
-			return err
-		}
+	seed, seedPassPhrase, walletPassword, err := x.readInput(requireSeed)
+	if err != nil {
+		return fmt.Errorf("error reading input parameters: %v", err)
 	}
 
 	switch x.InitType {
@@ -266,6 +199,91 @@ func (x *initWalletCommand) Execute(_ []string) error {
 	default:
 		return fmt.Errorf("invalid init type %s", x.InitType)
 	}
+}
+
+func (x *initWalletCommand) readInput(requireSeed bool) (string, string, string,
+	error) {
+
+	// First find out where we want to read the secrets from.
+	var (
+		seed           string
+		seedPassPhrase string
+		walletPassword string
+		err            error
+	)
+	switch x.SecretSource {
+	// Read all secrets from individual files.
+	case storageFile:
+		if requireSeed {
+			log("Reading seed from file")
+			seed, err = readFile(x.File.Seed)
+			if err != nil {
+				return "", "", "", err
+			}
+		}
+
+		// The seed passphrase is optional.
+		if x.File.SeedPassphrase != "" {
+			log("Reading seed passphrase from file")
+			seedPassPhrase, err = readFile(x.File.SeedPassphrase)
+			if err != nil {
+				return "", "", "", err
+			}
+		}
+
+		log("Reading wallet password from file")
+		walletPassword, err = readFile(x.File.WalletPassword)
+		if err != nil {
+			return "", "", "", err
+		}
+
+	// Read passphrase from Kubernetes secret.
+	case storageK8s:
+		k8sSecret := &k8sSecretOptions{
+			Namespace:  x.K8s.Namespace,
+			SecretName: x.K8s.SecretName,
+			Base64:     x.K8s.Base64,
+		}
+		k8sSecret.SecretKeyName = x.K8s.SeedKeyName
+
+		if requireSeed {
+			log("Reading seed from k8s secret %s (namespace %s)",
+				x.K8s.SecretName, x.K8s.Namespace)
+			seed, _, err = readK8s(k8sSecret)
+			if err != nil {
+				return "", "", "", err
+			}
+		}
+
+		// The seed passphrase is optional.
+		if x.K8s.SeedPassphraseKeyName != "" {
+			log("Reading seed passphrase from k8s secret %s "+
+				"(namespace %s)", x.K8s.SecretName,
+				x.K8s.Namespace)
+			k8sSecret.SecretKeyName = x.K8s.SeedPassphraseKeyName
+			seedPassPhrase, _, err = readK8s(k8sSecret)
+			if err != nil {
+				return "", "", "", err
+			}
+		}
+
+		log("Reading wallet password from k8s secret %s (namespace %s)",
+			x.K8s.SecretName, x.K8s.Namespace)
+		k8sSecret.SecretKeyName = x.K8s.WalletPasswordKeyName
+		walletPassword, _, err = readK8s(k8sSecret)
+		if err != nil {
+			return "", "", "", err
+		}
+	}
+
+	// The seed, its passphrase and the wallet password should all never
+	// have a newline at their end, otherwise that might lead to errors
+	// further down the line.
+	seed = stripNewline(seed)
+	seedPassPhrase = stripNewline(seedPassPhrase)
+	walletPassword = stripNewline(walletPassword)
+
+	return seed, seedPassPhrase, walletPassword, nil
 }
 
 func createWalletFile(cipherSeed *aezeed.CipherSeed, walletPassword, walletDir,
