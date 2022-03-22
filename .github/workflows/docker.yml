@@ -30,7 +30,7 @@ jobs:
           password: ${{ secrets.DOCKER_API_KEY }}
 
       - name: Set env for RELEASE_VERSION
-        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/docker}" >> $GITHUB_ENV
+        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/docker/}" >> $GITHUB_ENV
 
       # We will push tags with the format docker/v0.x.y-beta-lnd-v0.aa.bb-beta
       # where x and y are lndinit's version and aa and bb are lnd's version.
