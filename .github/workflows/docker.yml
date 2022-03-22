@@ -38,6 +38,9 @@ jobs:
       # know which base image we need to build on top of.
       - name: Set env for LND_VERSION
         run: echo "LND_VERSION=${RELEASE_VERSION##v*\.*\.*-beta-lnd-}" >> $GITHUB_ENV
+      
+      - name: Set env for LNDINIT_VERSION
+        run: echo "LNDINIT_VERSION=${RELEASE_VERSION%%-lnd-v*\.*\.*-beta}" >> $GITHUB_ENV
 
       - name: Build and push
         id: docker_build
@@ -47,7 +50,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: "${{ env.DOCKER_REPO }}/${{ env.DOCKER_IMAGE }}:${{ env.RELEASE_VERSION }}"
           build-args: |
-            checkout=${{ env.RELEASE_VERSION }}
+            checkout=${{ env.LNDINIT_VERSION }}
             BASE_IMAGE_VERSION=${{ env.LND_VERSION }}
 
       - name: Image digest
