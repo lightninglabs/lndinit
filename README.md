@@ -55,8 +55,8 @@ $ lndinit -v init-wallet \
     --secret-source=file \
     --file.seed=/safe/location/seed.txt \
     --file.wallet-password=/safe/location/walletpassword.txt \
-    --output-wallet-dir=$HOME/.lnd/data/chain/bitcoin/mainnet \
-    --validate-password
+    --init-file.output-wallet-dir=$HOME/.lnd/data/chain/bitcoin/mainnet \
+    --init-file.validate-password
 ```
 
 ### 4. Start and auto unlock lnd
