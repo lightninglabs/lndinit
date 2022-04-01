@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - 'docker/v*'
+  schedule:
+    # Every day at 1AM (UTC).
+    - cron: '0 1 * * *'
 
 defaults:
   run:
@@ -41,6 +44,13 @@ jobs:
       
       - name: Set env for LNDINIT_VERSION
         run: echo "LNDINIT_VERSION=${RELEASE_VERSION%%-lnd-v*\.*\.*-beta}" >> $GITHUB_ENV
+
+      - name: Set daily tag
+        if: github.event.schedule == '0 1 * * *'
+        run: |
+          echo "LND_VERSION=daily-testing-only" >> $GITHUB_ENV
+          echo "LNDINIT_VERSION=main" >> $GITHUB_ENV
+          echo "RELEASE_VERSION=daily-testing-$(date -u +%Y%m%d),${DOCKER_REPO}/${DOCKER_IMAGE}:daily-testing-only" >> $GITHUB_ENV
 
       - name: Build and push
         id: docker_build
