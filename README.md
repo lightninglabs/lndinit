@@ -4,6 +4,19 @@ This repository contains the source for the `lndinit` command.
 The main purpose of `lndinit` is to help automate the `lnd` wallet
 initialization, including seed and password generation.
 
+- [Requirements](#requirements)
+- [Subcommands](#subcommands)
+  - [`gen-password`](#gen-password)
+  - [`gen-seed`](#gen-seed)
+  - [`load-secret`](#load-secret)
+  - [`store-secret`](#store-secret)
+  - [`init-wallet`](#init-wallet)
+  - [`wait-ready`](#wait-ready)
+- [Example usage](#example-usage)
+  - [Basic setup](#example-use-case-1-basic-setup)
+  - [Kubernetes](#example-use-case-2-kubernetes)
+- [Logging and idempotent operations](#logging-and-idempotent-operations)
+
 ## Requirements
 
 Most commands of this tool operate independently of `lnd` and therefore don't
@@ -15,7 +28,43 @@ and later though.
 A recent version of Kubernetes is needed when interacting with secrets stored in
 k8s. Any version `>= v1.8` should work.
 
-## Example use case 1: Basic setup
+---
+
+## Subcommands
+
+Most commands work without `lnd` running, as they are designed to do some provisioning work _before_ `lnd` is started.
+
+### gen-password
+`gen-password` generates a random password (no `lnd` needed)
+
+### gen-seed
+`gen-seed` generates a random seed phrase
+
+No `lnd` needed, but seed will be in `lnd`-specific [`aezeed` format](https://github.com/lightningnetwork/lnd/blob/master/aezeed/README.md)
+
+### load-secret
+`load-secret` interacts with kubernetes to read from secrets (no `lnd` needed)
+
+### store-secret
+`store-secret` interacts with kubernetes to write to secrets (no `lnd` needed)
+
+### init-wallet
+`init-wallet` has two modes:
+- `--init-type=file` creates an `lnd` specific `wallet.db` file
+  - Only works if `lnd` is NOT running yet
+- `--init-type=rpc` calls the `lnd` RPC to create a wallet
+  - Use this mode if you are using a remote database as `lnd`'s storage backend instead of bolt DB based file databases
+  - Needs `lnd` to be running and no wallet to exist
+
+### wait-ready
+`wait-ready` waits for `lnd` to be ready by connecting to `lnd`'s status RPC
+- Needs `lnd` to run, eventually
+
+---
+
+## Example Usage
+
+### Example use case 1: Basic setup
 
 This is a very basic example that shows the purpose of the different sub
 commands of the `lndinit` binary. In this example, all secrets are stored in
@@ -24,7 +73,7 @@ or processes on a system can read those secrets if the permissions aren't set
 correctly. It is advised to store secrets in dedicated secret storage services
 like Kubernetes Secrets or HashiCorp Vault.
 
-### 1. Generate a seed without a seed passphrase
+#### 1. Generate a seed without a seed passphrase
 
 Create a new seed if one does not exist yet.
 
@@ -34,7 +83,7 @@ $ if [[ ! -f /safe/location/seed.txt ]]; then
   fi
 ```
 
-### 2. Generate a wallet password
+#### 2. Generate a wallet password
 
 Create a new wallet password if one does not exist yet.
 
@@ -44,7 +93,7 @@ $ if [[ ! -f /safe/location/walletpassword.txt ]]; then
   fi
 ```
 
-### 3. Initialize the wallet
+#### 3. Initialize the wallet
 
 Create the wallet database with the given seed and password files. If the wallet
 already exists, we make sure we can actually unlock it with the given password
@@ -59,7 +108,7 @@ $ lndinit -v init-wallet \
     --init-file.validate-password
 ```
 
-### 4. Start and auto unlock lnd
+#### 4. Start and auto unlock lnd
 
 With everything prepared, we can now start lnd and instruct it to auto unlock
 itself with the password in the file we prepared.
@@ -71,7 +120,7 @@ $ lnd \
     --wallet-unlock-password-file=/safe/location/walletpassword.txt
 ```
 
-## Example use case 2: Kubernetes
+### Example use case 2: Kubernetes
 
 This example shows how Kubernetes (k8s) Secrets can be used to store the wallet
 seed and password. The pod running those commands must be provisioned with a
@@ -164,7 +213,7 @@ The script executes the steps described in this example and also uploads the
 RPC secrets (`tls.cert` and all `*.macaroon` files) to another secret so apps
 using the `lnd` node can access those secrets.
 
-### 1. Generate a seed passphrase (optional)
+#### 1. Generate a seed passphrase (optional)
 
 Generate a new seed passphrase. If an entry with the key already exists in the
 k8s secret, it is not overwritten, and the operation is a no-op.
@@ -177,7 +226,7 @@ $ lndinit gen-password \
     --k8s.secret-key-name=seed-passphrase
 ```
 
-### 2. Generate a seed using the passphrase
+#### 2. Generate a seed using the passphrase
 
 Generate a new seed with the passphrase created before. If an entry with that
 key already exists in the k8s secret, it is not overwritten, and the operation
@@ -193,7 +242,7 @@ $ lndinit -v gen-seed \
     --k8s.secret-key-name=seed
 ```
 
-### 3. Generate a wallet password
+#### 3. Generate a wallet password
 
 Generate a new wallet password. If an entry with that key already exists in the
 k8s secret, it is not overwritten, and the operation is a no-op.
@@ -206,7 +255,7 @@ $ lndinit gen-password \
     --k8s.secret-key-name=wallet-password
 ```
 
-### 4. Initialize the wallet, attempting a test unlock with the password
+#### 4. Initialize the wallet, attempting a test unlock with the password
 
 Create the wallet database with the given seed, seed passphrase and wallet
 password loaded from a k8s secret. If the wallet already exists, we make sure we
@@ -268,7 +317,7 @@ $ lndinit -v init-wallet \
     --init-rpc.accounts-file=/tmp/accounts.json
 ```
 
-### 5. Store the wallet password in a file
+#### 5. Store the wallet password in a file
 
 Because we now only have the wallet password as a value in a k8s secret, we need
 to retrieve it and store it in a file that `lnd` can read to auto unlock.
@@ -308,7 +357,7 @@ $ lnd \
     --wallet-unlock-password-file=/tmp/wallet-password
 ```
 
-### 6. Start and auto unlock lnd
+#### 6. Start and auto unlock lnd
 
 With everything prepared, we can now start lnd and instruct it to auto unlock
 itself with the password in the file we prepared.
@@ -319,6 +368,8 @@ $ lnd \
     ...
     --wallet-unlock-password-file=/safe/location/walletpassword.txt
 ```
+
+---
 
 ## Logging and idempotent operations
 
