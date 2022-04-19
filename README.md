@@ -186,7 +186,7 @@ spec:
           # The lndinit image is an image based on the main lnd image that just
           # adds the lndinit binary to it. The tag name is simply:
           #   <lndinit-version>-lnd-<lnd-version>
-          image: lightninglabs/lndinit:v0.1.0-lnd-v0.14.2-beta
+          image: lightninglabs/lndinit:v0.1.0-lnd-v0.14.3-beta
           env:
             - name: WALLET_SECRET_NAME
               value: lnd-wallet-secret

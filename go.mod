@@ -6,7 +6,7 @@ require (
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/kkdai/bstream v1.0.0
 	github.com/lightninglabs/protobuf-hex-display v1.4.3-hex-display
-	github.com/lightningnetwork/lnd v0.14.2-beta
+	github.com/lightningnetwork/lnd v0.14.3-beta
 	github.com/stretchr/testify v1.7.0
 	google.golang.org/grpc v1.38.0
 	k8s.io/api v0.18.3
