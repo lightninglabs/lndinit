@@ -33,6 +33,7 @@ function build_release() {
   go mod vendor
   tar -czf vendor.tar.gz vendor
 
+  tag=$(echo "$tag" | sed 's/\//_/')
   maindir=$PACKAGE-$tag
   mkdir -p $maindir
 
