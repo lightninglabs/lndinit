@@ -43,7 +43,7 @@ jobs:
         run: echo "LND_VERSION=${RELEASE_VERSION##v*\.*\.*-beta-lnd-}" >> $GITHUB_ENV
       
       - name: Set env for LNDINIT_VERSION
-        run: echo "LNDINIT_VERSION=${RELEASE_VERSION%%-lnd-v*\.*\.*-beta}" >> $GITHUB_ENV
+        run: echo "LNDINIT_VERSION=${RELEASE_VERSION%%-lnd-v*\.*\.*-beta*}" >> $GITHUB_ENV
 
       - name: Set daily tag
         if: github.event.schedule == '0 1 * * *'
