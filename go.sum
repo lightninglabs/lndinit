@@ -329,6 +329,10 @@ github.com/grpc-ecosystem/grpc-gateway v1.16.0 h1:gmcG1KaJ57LophUzW0Hy8NmPhnMZb4
 github.com/grpc-ecosystem/grpc-gateway v1.16.0/go.mod h1:BDjrQk3hbvj6Nolgz8mAMFbcEtjT1g+wF4CSlocrBnw=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.5.0 h1:ajue7SzQMywqRjg2fK7dcpc0QhFGpTR2plWfV4EZWR4=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.5.0/go.mod h1:r1hZAcvfFXuYmcKyCJI9wlyOPIZUJl6FCB8Cpca/NLE=
+github.com/guggero/lnd v0.11.0-beta.rc4.0.20220704143131-645239aa770a h1:6bOF/RV1Dy3L+S3I5o3XT0eQM1DzkBChIFsuMFYRpGk=
+github.com/guggero/lnd v0.11.0-beta.rc4.0.20220704143131-645239aa770a/go.mod h1:sa+hYajDLPn2I2zG99ylXOCF3yK3AQqFu0M0v97vh08=
+github.com/guggero/lnd/kvdb v1.2.2-0.20220704143131-645239aa770a h1:yxduq55qA/EADILmNliAIUG2HnBIL4pW6Uo2ADb2Mzs=
+github.com/guggero/lnd/kvdb v1.2.2-0.20220704143131-645239aa770a/go.mod h1:x+IpsuDynubjokUofavLXroeGfS/WrqUXXTK6vN/gp4=
 github.com/hashicorp/consul/api v1.1.0/go.mod h1:VmuI/Lkw1nC05EYQWNKwWGbkg+FbDBtguAZLlVdkD9Q=
 github.com/hashicorp/consul/sdk v0.1.1/go.mod h1:VKf9jXwCTEY1QZP2MOLRhb5i/I/ssyNV1vwHyQBF0x8=
 github.com/hashicorp/errwrap v1.0.0/go.mod h1:YH+1FKiLXxHSkmPseP+kNlulaMuP3n2brvKWEqk/Jc4=
@@ -530,8 +534,6 @@ github.com/lightninglabs/protobuf-hex-display v1.4.3-hex-display h1:RZJ8H4ueU/aQ
 github.com/lightninglabs/protobuf-hex-display v1.4.3-hex-display/go.mod h1:2oKOBU042GKFHrdbgGiKax4xVrFiZu51lhacUZQ9MnE=
 github.com/lightningnetwork/lightning-onion v1.0.2-0.20220211021909-bb84a1ccb0c5 h1:TkKwqFcQTGYoI+VEqyxA8rxpCin8qDaYX0AfVRinT3k=
 github.com/lightningnetwork/lightning-onion v1.0.2-0.20220211021909-bb84a1ccb0c5/go.mod h1:7dDx73ApjEZA0kcknI799m2O5kkpfg4/gr7N092ojNo=
-github.com/lightningnetwork/lnd v0.15.0-beta h1:smzYjJqL4nGuj4qrAWdikrPzPJ8fcPRFHQ86S2tHR1M=
-github.com/lightningnetwork/lnd v0.15.0-beta/go.mod h1:Tm7LZrYeR2JQH1gEOKmd0NTCgjJ1Bnujkx4lcz9b5+A=
 github.com/lightningnetwork/lnd/cert v1.1.1/go.mod h1:1P46svkkd73oSoeI4zjkVKgZNwGq8bkGuPR8z+5vQUs=
 github.com/lightningnetwork/lnd/clock v1.0.1/go.mod h1:KnQudQ6w0IAMZi1SgvecLZQZ43ra2vpDNj7H/aasemg=
 github.com/lightningnetwork/lnd/clock v1.1.0 h1:/yfVAwtPmdx45aQBoXQImeY7sOIEr7IXlImRMBOZ7GQ=
@@ -539,8 +541,6 @@ github.com/lightningnetwork/lnd/clock v1.1.0/go.mod h1:KnQudQ6w0IAMZi1SgvecLZQZ4
 github.com/lightningnetwork/lnd/healthcheck v1.0.0/go.mod h1:u92p1JGFJNMSkMvztKEwmt1P3TRnLeJBXZ3M85xkU1E=
 github.com/lightningnetwork/lnd/healthcheck v1.2.2 h1:im+qcpgSuteqRCGeorT9yqVXuLrS6A7/acYzGgarMS4=
 github.com/lightningnetwork/lnd/healthcheck v1.2.2/go.mod h1:IWY0GChlarRbXFkFDdE4WY5POYJabe/7/H1iCZt4ZKs=
-github.com/lightningnetwork/lnd/kvdb v1.3.1 h1:gEz3zudNNRrCLEvqRaktYoKwsUblyHX+MKjR0aI3QnM=
-github.com/lightningnetwork/lnd/kvdb v1.3.1/go.mod h1:x+IpsuDynubjokUofavLXroeGfS/WrqUXXTK6vN/gp4=
 github.com/lightningnetwork/lnd/queue v1.0.1/go.mod h1:vaQwexir73flPW43Mrm7JOgJHmcEFBWWSl9HlyASoms=
 github.com/lightningnetwork/lnd/queue v1.1.0 h1:YpCJjlIvVxN/R7ww2aNiY8ex7U2fucZDLJ67tI3HFx8=
 github.com/lightningnetwork/lnd/queue v1.1.0/go.mod h1:YTkTVZCxz8tAYreH27EO3s8572ODumWrNdYW2E/YKxg=
@@ -724,7 +724,7 @@ github.com/ulikunitz/xz v0.5.6/go.mod h1:2bypXElzHzzJZwzH67Y6wb67pO62Rzfn7BSiF4A
 github.com/ulikunitz/xz v0.5.7/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
 github.com/ulikunitz/xz v0.5.10 h1:t92gobL9l3HE202wg3rlk19F6X+JOxl9BBrCCMYEYd8=
 github.com/ulikunitz/xz v0.5.10/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
-github.com/urfave/cli v1.22.4/go.mod h1:Gos4lmkARVdJ6EkW0WaNv/tZAAMe9V7XWyB60NtXRu0=
+github.com/urfave/cli v1.22.9/go.mod h1:Gos4lmkARVdJ6EkW0WaNv/tZAAMe9V7XWyB60NtXRu0=
 github.com/xdg-go/stringprep v1.0.2 h1:6iq84/ryjjeRmMJwxutI51F2GIPlP5BfTvXHeYjyhBc=
 github.com/xdg-go/stringprep v1.0.2/go.mod h1:8F9zXuvzgwmyT5DUm4GUfZGDdT3W+LCvS6+da4O5kxM=
 github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 h1:nIPpBwaJSVYIxUFsDv3M8ofmx9yWTog9BfvIu0q41lo=

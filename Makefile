@@ -22,6 +22,9 @@ XARGS := xargs -L 1
 
 VERSION_TAG = $(shell git describe --tags)
 
+DEV_TAGS = kvdb_etcd kvdb_postgres
+RELEASE_TAGS = $(DEV_TAGS)
+
 BUILD_SYSTEM = darwin-amd64 \
 linux-386 \
 linux-amd64 \
@@ -49,7 +52,7 @@ endif
 make_ldflags = $(2) -X $(PKG).Commit=$(COMMIT)
 
 DEV_GCFLAGS := -gcflags "all=-N -l"
-LDFLAGS := -ldflags "$(call make_ldflags, ${tags}, -s -w)"
+LDFLAGS := -ldflags "$(call make_ldflags, $(DEV_TAGS), -s -w)"
 DEV_LDFLAGS := -ldflags "$(call make_ldflags, $(DEV_TAGS))"
 
 # For the release, we want to remove the symbol table and debug information (-s)
@@ -83,7 +86,7 @@ build:
 
 install:
 	@$(call print, "Installing lndinit.")
-	$(GOINSTALL) -tags="${tags}" $(LDFLAGS) $(PKG)
+	$(GOINSTALL) -tags="$(DEV_TAGS)" $(LDFLAGS) $(PKG)
 
 release-install:
 	@$(call print, "Installing release lndinit.")
