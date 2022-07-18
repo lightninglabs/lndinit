@@ -32,33 +32,38 @@ k8s. Any version `>= v1.8` should work.
 
 ## Subcommands
 
-Most commands work without `lnd` running, as they are designed to do some provisioning work _before_ `lnd` is started.
+Most commands work without `lnd` running, as they are designed to do some
+provisioning work _before_ `lnd` is started or maintenance functions while `lnd`
+is not running.
 
 ### gen-password
-`gen-password` generates a random password (no `lnd` needed)
+`gen-password` generates a random password (no `lnd` needed).
 
 ### gen-seed
-`gen-seed` generates a random seed phrase
+`gen-seed` generates a random seed phrase.
 
-No `lnd` needed, but seed will be in `lnd`-specific [`aezeed` format](https://github.com/lightningnetwork/lnd/blob/master/aezeed/README.md)
+No `lnd` needed, but seed will be in `lnd`-specific [`aezeed`
+format](https://github.com/lightningnetwork/lnd/blob/master/aezeed/README.md).
 
 ### init-wallet
 `init-wallet` has two modes:
-- `--init-type=file` creates an `lnd` specific `wallet.db` file
-  - Only works if `lnd` is NOT running yet
-- `--init-type=rpc` calls the `lnd` RPC to create a wallet
-  - Use this mode if you are using a remote database as `lnd`'s storage backend instead of bolt DB based file databases
-  - Needs `lnd` to be running and no wallet to exist
+- `--init-type=file` creates an `lnd` specific `wallet.db` file.
+  - Only works if `lnd` is NOT running yet.
+- `--init-type=rpc` calls the `lnd` RPC to create a wallet.
+  - Use this mode if you are using a remote database as `lnd`'s storage backend
+    instead of bolt DB based file databases.
+  - Needs `lnd` to be running and no wallet to exist.
 
 ### load-secret
-`load-secret` interacts with kubernetes to read from secrets (no `lnd` needed)
+`load-secret` interacts with kubernetes to read from secrets (no `lnd` needed).
 
 ### store-secret
-`store-secret` interacts with kubernetes to write to secrets (no `lnd` needed)
+`store-secret` interacts with kubernetes to write to secrets (no `lnd` needed).
 
 ### wait-ready
-`wait-ready` waits for `lnd` to be ready by connecting to `lnd`'s status RPC
-- Needs `lnd` to run, eventually
+`wait-ready` waits for `lnd` to be ready by connecting to `lnd`'s status RPC.
+
+Needs `lnd` to run, eventually.
 
 ---
 
