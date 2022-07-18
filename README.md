@@ -6,6 +6,7 @@ initialization, including seed and password generation.
 
 - [Requirements](#requirements)
 - [Subcommands](#subcommands)
+  - [`compact-db`](#compact-db)
   - [`gen-password`](#gen-password)
   - [`gen-seed`](#gen-seed)
   - [`init-wallet`](#init-wallet)
@@ -37,6 +38,14 @@ k8s. Any version `>= v1.8` should work.
 Most commands work without `lnd` running, as they are designed to do some
 provisioning work _before_ `lnd` is started or maintenance functions while `lnd`
 is not running.
+
+### compact-db
+
+`compact-db` runs the compaction process on a bbolt based channel database file
+(`channel.db`) without the need to start `lnd`
+
+No `lnd` needed; in fact `lnd` needs to be shut down in order to release the
+write-lock on the `channel.db` file that should be compacted.
 
 ### gen-password
 `gen-password` generates a random password (no `lnd` needed).

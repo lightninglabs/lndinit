@@ -111,6 +111,7 @@ type subCommand interface {
 
 func registerCommands(parser *flags.Parser) error {
 	commands := []subCommand{
+		newCompactDBCommand(),
 		newGenPasswordCommand(),
 		newGenSeedCommand(),
 		newInitWalletCommand(),
