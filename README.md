@@ -14,6 +14,7 @@ initialization, including seed and password generation.
   - [`store-secret`](#store-secret)
   - [`test-scb`](#test-scb)
   - [`test-seed`](#test-seed)
+  - [`test-wallet`](#test-wallet)
   - [`wait-ready`](#wait-ready)
 - [Example usage](#example-usage)
   - [Basic setup](#example-use-case-1-basic-setup)
@@ -98,6 +99,14 @@ deriving the node's public identity key.
 
 No `lnd` needed, but seed must be entered in `lnd`-specific [`aezeed`
 format](https://github.com/lightningnetwork/lnd/blob/master/aezeed/README.md)
+
+### test-wallet
+`test-wallet` tests whether a wallet file (wallet.db) can be correctly decrypted
+with the given password; then prints the node's identity public key the wallet
+was created for, if decryption was successful.
+
+No `lnd` needed; in fact `lnd` needs to be shut down in order to release the
+write-lock on the `wallet.db` file that should be decrypted.
 
 ### wait-ready
 `wait-ready` waits for `lnd` to be ready by connecting to `lnd`'s status RPC.
