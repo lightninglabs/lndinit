@@ -113,8 +113,8 @@ func registerCommands(parser *flags.Parser) error {
 	commands := []subCommand{
 		newGenPasswordCommand(),
 		newGenSeedCommand(),
-		newLoadSecretCommand(),
 		newInitWalletCommand(),
+		newLoadSecretCommand(),
 		newStoreSecretCommand(),
 		newWaitReadyCommand(),
 	}

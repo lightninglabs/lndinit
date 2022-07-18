@@ -8,9 +8,9 @@ initialization, including seed and password generation.
 - [Subcommands](#subcommands)
   - [`gen-password`](#gen-password)
   - [`gen-seed`](#gen-seed)
+  - [`init-wallet`](#init-wallet)
   - [`load-secret`](#load-secret)
   - [`store-secret`](#store-secret)
-  - [`init-wallet`](#init-wallet)
   - [`wait-ready`](#wait-ready)
 - [Example usage](#example-usage)
   - [Basic setup](#example-use-case-1-basic-setup)
@@ -42,12 +42,6 @@ Most commands work without `lnd` running, as they are designed to do some provis
 
 No `lnd` needed, but seed will be in `lnd`-specific [`aezeed` format](https://github.com/lightningnetwork/lnd/blob/master/aezeed/README.md)
 
-### load-secret
-`load-secret` interacts with kubernetes to read from secrets (no `lnd` needed)
-
-### store-secret
-`store-secret` interacts with kubernetes to write to secrets (no `lnd` needed)
-
 ### init-wallet
 `init-wallet` has two modes:
 - `--init-type=file` creates an `lnd` specific `wallet.db` file
@@ -55,6 +49,12 @@ No `lnd` needed, but seed will be in `lnd`-specific [`aezeed` format](https://gi
 - `--init-type=rpc` calls the `lnd` RPC to create a wallet
   - Use this mode if you are using a remote database as `lnd`'s storage backend instead of bolt DB based file databases
   - Needs `lnd` to be running and no wallet to exist
+
+### load-secret
+`load-secret` interacts with kubernetes to read from secrets (no `lnd` needed)
+
+### store-secret
+`store-secret` interacts with kubernetes to write to secrets (no `lnd` needed)
 
 ### wait-ready
 `wait-ready` waits for `lnd` to be ready by connecting to `lnd`'s status RPC
