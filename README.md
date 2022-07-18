@@ -68,6 +68,18 @@ format](https://github.com/lightningnetwork/lnd/blob/master/aezeed/README.md).
 ### load-secret
 `load-secret` interacts with kubernetes to read from secrets (no `lnd` needed).
 
+### migrate-db
+
+`compact-db` runs all pending schema migrations on a bbolt based channel
+database file (`channel.db`) without the need to start `lnd`
+
+No `lnd` needed; in fact `lnd` needs to be shut down in order to release the
+write-lock on the `channel.db` file that should be compacted.
+
+NOTE: Running this command will make it impossible to downgrade lnd to a version
+before the one `lndinit` was built with! Run `lndinit --version` to see what
+version of `lnd` it was built against.
+
 ### store-secret
 `store-secret` interacts with kubernetes to write to secrets (no `lnd` needed).
 

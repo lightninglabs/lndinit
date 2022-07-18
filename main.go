@@ -33,6 +33,11 @@ const (
 
 var (
 	log logger = noopLogger
+
+	// LNDVersion is the version of lnd that chantools was built against.
+	// This is parsed from the go.mod file and injected into this variable
+	// during the build process.
+	LNDVersion string
 )
 
 type globalOptions struct {
@@ -116,6 +121,7 @@ func registerCommands(parser *flags.Parser) error {
 		newGenSeedCommand(),
 		newInitWalletCommand(),
 		newLoadSecretCommand(),
+		newMigrateDBCommand(),
 		newStoreSecretCommand(),
 		newTestSCBCommand(),
 		newTestSeedCommand(),

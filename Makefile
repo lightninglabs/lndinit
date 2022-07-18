@@ -2,6 +2,8 @@ PKG := github.com/lightninglabs/lndinit
 ESCPKG := github.com\/lightninglabs\/lndinit
 TOOLS_DIR := tools
 
+LND_PKG := github.com/lightningnetwork/lnd
+
 GO_BIN := ${GOPATH}/bin
 GOIMPORTS_BIN := $(GO_BIN)/gosimports
 
@@ -14,6 +16,11 @@ GOTEST := go test -v
 DOCKER_TOOLS := docker run -v $$(pwd):/build lndinit-tools
 
 GOFILES_NOVENDOR = $(shell find . -type f -name '*.go' -not -path "./vendor/*")
+
+LND_COMMIT := $(shell go list -m all | \
+		grep $(LND_PKG) | \
+		head -n1 | \
+		awk -F " " '{ print $$2 }')
 
 RM := rm -f
 CP := cp
@@ -46,7 +53,7 @@ endif
 # We only return the part inside the double quote here to avoid escape issues
 # when calling the external release script. The second parameter can be used to
 # add additional ldflags if needed (currently only used for the release).
-make_ldflags = $(2) -X $(PKG).Commit=$(COMMIT)
+make_ldflags = $(2) -X $(PKG).Commit=$(COMMIT) -X $(PKG).LNDVersion=$(LND_COMMIT)
 
 DEV_GCFLAGS := -gcflags "all=-N -l"
 LDFLAGS := -ldflags "$(call make_ldflags, ${tags}, -s -w)"
