@@ -116,6 +116,7 @@ func registerCommands(parser *flags.Parser) error {
 		newInitWalletCommand(),
 		newLoadSecretCommand(),
 		newStoreSecretCommand(),
+		newTestSeedCommand(),
 		newWaitReadyCommand(),
 	}
 

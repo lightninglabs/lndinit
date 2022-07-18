@@ -11,6 +11,7 @@ initialization, including seed and password generation.
   - [`init-wallet`](#init-wallet)
   - [`load-secret`](#load-secret)
   - [`store-secret`](#store-secret)
+  - [`test-seed`](#test-seed)
   - [`wait-ready`](#wait-ready)
 - [Example usage](#example-usage)
   - [Basic setup](#example-use-case-1-basic-setup)
@@ -59,6 +60,13 @@ format](https://github.com/lightningnetwork/lnd/blob/master/aezeed/README.md).
 
 ### store-secret
 `store-secret` interacts with kubernetes to write to secrets (no `lnd` needed).
+
+### test-seed
+`test-seed` tests whether a seed (and its optional passphrase) is correct by
+deriving the node's public identity key.
+
+No `lnd` needed, but seed must be entered in `lnd`-specific [`aezeed`
+format](https://github.com/lightningnetwork/lnd/blob/master/aezeed/README.md)
 
 ### wait-ready
 `wait-ready` waits for `lnd` to be ready by connecting to `lnd`'s status RPC.
