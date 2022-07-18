@@ -11,6 +11,7 @@ initialization, including seed and password generation.
   - [`init-wallet`](#init-wallet)
   - [`load-secret`](#load-secret)
   - [`store-secret`](#store-secret)
+  - [`test-scb`](#test-scb)
   - [`test-seed`](#test-seed)
   - [`wait-ready`](#wait-ready)
 - [Example usage](#example-usage)
@@ -60,6 +61,15 @@ format](https://github.com/lightningnetwork/lnd/blob/master/aezeed/README.md).
 
 ### store-secret
 `store-secret` interacts with kubernetes to write to secrets (no `lnd` needed).
+
+### test-scb
+
+`test-scb` tests a static channel backup (SCB, also known as `channel.backup`)
+file for integrity and optionally dumps its content.
+
+No `lnd` needed, but seed must be entered in `lnd`-specific [`aezeed`
+format](https://github.com/lightningnetwork/lnd/blob/master/aezeed/README.md) in
+order to decrypt the SCB file.
 
 ### test-seed
 `test-seed` tests whether a seed (and its optional passphrase) is correct by
