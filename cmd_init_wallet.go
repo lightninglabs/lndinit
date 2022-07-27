@@ -37,19 +37,27 @@ var (
 	defaultWalletDBTimeout = 2 * time.Second
 )
 
-type secretSourceFile struct {
+type seedSecretSourceFile struct {
 	Seed           string `long:"seed" description:"The full path to the file that contains the seed; if the file does not exist, lndinit will exit with code EXIT_CODE_INPUT_MISSING (129)"`
 	SeedPassphrase string `long:"seed-passphrase" description:"The full path to the file that contains the seed passphrase; if not set, no passphrase will be used; if set but the file does not exist, lndinit will exit with code EXIT_CODE_INPUT_MISSING (129)"`
+}
+
+type secretSourceFile struct {
+	seedSecretSourceFile
 	WalletPassword string `long:"wallet-password" description:"The full path to the file that contains the wallet password; if the file does not exist, lndinit will exit with code EXIT_CODE_INPUT_MISSING (129)"`
 }
 
-type secretSourceK8s struct {
+type seedSecretSourceK8s struct {
 	Namespace             string `long:"namespace" description:"The Kubernetes namespace the secret is located in"`
 	SecretName            string `long:"secret-name" description:"The name of the Kubernetes secret"`
 	SeedKeyName           string `long:"seed-key-name" description:"The name of the key within the secret that contains the seed"`
 	SeedPassphraseKeyName string `long:"seed-passphrase-key-name" description:"The name of the key within the secret that contains the seed passphrase"`
-	WalletPasswordKeyName string `long:"wallet-password-key-name" description:"The name of the key within the secret that contains the wallet password"`
 	Base64                bool   `long:"base64" description:"Encode as base64 when storing and decode as base64 when reading"`
+}
+
+type secretSourceK8s struct {
+	seedSecretSourceK8s
+	WalletPasswordKeyName string `long:"wallet-password-key-name" description:"The name of the key within the secret that contains the wallet password"`
 }
 
 type initTypeFile struct {
@@ -78,7 +86,9 @@ func newInitWalletCommand() *initWalletCommand {
 	return &initWalletCommand{
 		Network:      defaultBitcoinNetwork,
 		SecretSource: storageFile,
-		File:         &secretSourceFile{},
+		File:         &secretSourceFile{
+			seedSecretSourceFile: &{},
+		},
 		K8s: &secretSourceK8s{
 			Namespace: defaultK8sNamespace,
 		},

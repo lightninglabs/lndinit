@@ -20,6 +20,7 @@ initialization, including seed and password generation.
   - [Basic setup](#example-use-case-1-basic-setup)
   - [Kubernetes](#example-use-case-2-kubernetes)
 - [Logging and idempotent operations](#logging-and-idempotent-operations)
+- [Seed, passphrase and wallet password input](#seed-passphrase-and-wallet-password-input)
 
 ## Requirements
 
@@ -457,3 +458,48 @@ $ if [[ $ret -eq 0 ]]; then
   fi
 ```
 
+## Seed, passphrase and wallet password input
+
+All commands that require the seed (and, if set, the seed's passphrase) or the
+wallet password to be entered, offer multiple possibilities to specify it:
+1. **Enter manually on the terminal** (`--secret-source=terminal`): This is the
+   safest option as it makes sure that the seed or password isn't stored in the
+   terminal's command history.
+2. **Load from a file** (`--secret-source=file`): Load the seed or password from
+   a file. See the sub command's help for more information about the name of the
+   file flag(s) to use. A file will always be read fully until the `EOF` marker
+   is reached. This might include newline characters at the end of a password if
+   it was stored with a text editor. This flag can also be used in combination
+   with `--file.base64` to indicate the file content should be base64 decoded
+   before using it.
+3. **Load from Kubernetes secret** (`--secret-source=k8s`): Load the seed or
+   password from a k8s secret. See the sub command's help for more information
+   about the name of the flag(s) to use.
+4. **Use environment variables** (`--secret-source=env`): This option makes it easy to automate usage of
+   `lndinit` by removing the need to type into the terminal. There are three
+   environment variables that can be set to skip entering values through the
+   terminal:
+  - `AEZEED_MNEMONIC`: Specifies the 24 word `lnd` aezeed.
+  - `AEZEED_PASSPHRASE`: Specifies the passphrase for the aezeed. If no
+    passphrase was used during the creation of the seed, the special value
+    `AEZEED_PASSPHRASE="-"` needs to be passed to indicate no passphrase
+    should be used or read from the terminal.
+  - `WALLET_PASSWORD`: Specifies the encryption password that is needed to
+    access a `wallet.db` file. This is currently only used by the `test-wallet`
+    command.
+
+Example using environment variables:
+
+```shell script
+# We add a space in front of each command to tell bash we don't want this
+# command stored in the history.
+$    export AEZEED_MNEMONIC="abandon able ... ... ..."
+# We didn't set a passphrase for this example seed, we need to indicate this by
+# passing in a single dash character.
+$    export AEZEED_PASSPHRASE="-"
+$ lndinit test-seed
+
+2020-10-29 20:22:42.329 [INF] CHAN: chantools version v0.6.0 commit v0.6.0-3
+
+Your BIP32 HD root key is: xprv9s21ZrQH1...
+```
