@@ -12,6 +12,7 @@ initialization, including seed and password generation.
   - [`store-secret`](#store-secret)
   - [`init-wallet`](#init-wallet)
   - [`wait-ready`](#wait-ready)
+  - [`migrate-db`](#migrate-db)
 - [Example usage](#example-usage)
   - [Basic setup](#example-use-case-1-basic-setup)
   - [Kubernetes](#example-use-case-2-kubernetes)
@@ -59,6 +60,11 @@ No `lnd` needed, but seed will be in `lnd`-specific [`aezeed` format](https://gi
 ### wait-ready
 `wait-ready` waits for `lnd` to be ready by connecting to `lnd`'s status RPC
 - Needs `lnd` to run, eventually
+
+### migrate-db
+`migrate-db` migrates the content of one `lnd` database to another, for example
+from `bbolt` to Postgres. See [data migration guide](docs/data-migration.md) for
+more information.
 
 ---
 

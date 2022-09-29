@@ -2,12 +2,15 @@ module github.com/lightninglabs/lndinit
 
 require (
 	github.com/btcsuite/btcd v0.23.1
-	github.com/btcsuite/btcwallet v0.15.1
+	github.com/btcsuite/btcwallet v0.16.1
+	github.com/btcsuite/btcwallet/walletdb v1.4.0
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/kkdai/bstream v1.0.0
 	github.com/lightninglabs/protobuf-hex-display v1.4.3-hex-display
-	github.com/lightningnetwork/lnd v0.15.0-beta
+	github.com/lightningnetwork/lnd v0.15.1-beta
+	github.com/lightningnetwork/lnd/kvdb v1.3.1
 	github.com/stretchr/testify v1.7.1
+	go.etcd.io/etcd/client/v3 v3.5.0
 	google.golang.org/grpc v1.38.0
 	k8s.io/api v0.18.3
 	k8s.io/apimachinery v0.18.3
@@ -20,15 +23,14 @@ require (
 	github.com/aead/siphash v1.0.1 // indirect
 	github.com/andybalholm/brotli v1.0.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
-	github.com/btcsuite/btcd/btcutil v1.1.1 // indirect
-	github.com/btcsuite/btcd/btcutil/psbt v1.1.4 // indirect
+	github.com/btcsuite/btcd/btcec/v2 v2.2.1 // indirect
+	github.com/btcsuite/btcd/btcutil v1.1.2 // indirect
+	github.com/btcsuite/btcd/btcutil/psbt v1.1.5 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1 // indirect
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f // indirect
-	github.com/btcsuite/btcwallet/wallet/txauthor v1.2.3 // indirect
+	github.com/btcsuite/btcwallet/wallet/txauthor v1.3.2 // indirect
 	github.com/btcsuite/btcwallet/wallet/txrules v1.2.0 // indirect
-	github.com/btcsuite/btcwallet/wallet/txsizes v1.1.0 // indirect
-	github.com/btcsuite/btcwallet/walletdb v1.4.0 // indirect
+	github.com/btcsuite/btcwallet/wallet/txsizes v1.2.3 // indirect
 	github.com/btcsuite/btcwallet/wtxmgr v1.5.0 // indirect
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
 	github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792 // indirect
@@ -87,11 +89,10 @@ require (
 	github.com/lightningnetwork/lightning-onion v1.0.2-0.20220211021909-bb84a1ccb0c5 // indirect
 	github.com/lightningnetwork/lnd/clock v1.1.0 // indirect
 	github.com/lightningnetwork/lnd/healthcheck v1.2.2 // indirect
-	github.com/lightningnetwork/lnd/kvdb v1.3.1 // indirect
 	github.com/lightningnetwork/lnd/queue v1.1.0 // indirect
 	github.com/lightningnetwork/lnd/ticker v1.1.0 // indirect
 	github.com/lightningnetwork/lnd/tlv v1.0.3 // indirect
-	github.com/lightningnetwork/lnd/tor v1.0.1 // indirect
+	github.com/lightningnetwork/lnd/tor v1.0.2 // indirect
 	github.com/ltcsuite/ltcd v0.0.0-20190101042124-f37f8bf35796 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/mholt/archiver/v3 v3.5.0 // indirect
@@ -109,6 +110,7 @@ require (
 	github.com/sirupsen/logrus v1.7.0 // indirect
 	github.com/soheilhy/cmux v0.1.5 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7 // indirect
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20201229170055-e5319fda7802 // indirect
 	github.com/ulikunitz/xz v0.5.10 // indirect
@@ -119,7 +121,6 @@ require (
 	go.etcd.io/etcd/api/v3 v3.5.0 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.0 // indirect
 	go.etcd.io/etcd/client/v2 v2.305.0 // indirect
-	go.etcd.io/etcd/client/v3 v3.5.0 // indirect
 	go.etcd.io/etcd/pkg/v3 v3.5.0 // indirect
 	go.etcd.io/etcd/raft/v3 v3.5.0 // indirect
 	go.etcd.io/etcd/server/v3 v3.5.0 // indirect
@@ -158,5 +159,9 @@ require (
 	sigs.k8s.io/structured-merge-diff/v3 v3.0.0 // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )
+
+replace github.com/lightningnetwork/lnd => github.com/guggero/lnd v0.11.0-beta.rc4.0.20220929103152-dd030173c450
+
+replace github.com/lightningnetwork/lnd/kvdb => github.com/guggero/lnd/kvdb v1.2.2-0.20220929103152-dd030173c450
 
 go 1.17
