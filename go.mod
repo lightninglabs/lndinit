@@ -1,12 +1,12 @@
 module github.com/lightninglabs/lndinit
 
 require (
-	github.com/btcsuite/btcd v0.23.2
-	github.com/btcsuite/btcwallet v0.15.1
+	github.com/btcsuite/btcd v0.23.3
+	github.com/btcsuite/btcwallet v0.16.1
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/kkdai/bstream v1.0.0
 	github.com/lightninglabs/protobuf-hex-display v1.4.3-hex-display
-	github.com/lightningnetwork/lnd v0.15.2-beta
+	github.com/lightningnetwork/lnd v0.15.4-beta
 	github.com/stretchr/testify v1.7.1
 	google.golang.org/grpc v1.38.0
 	k8s.io/api v0.18.3
@@ -25,9 +25,9 @@ require (
 	github.com/btcsuite/btcd/btcutil/psbt v1.1.5 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1 // indirect
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f // indirect
-	github.com/btcsuite/btcwallet/wallet/txauthor v1.2.3 // indirect
+	github.com/btcsuite/btcwallet/wallet/txauthor v1.3.2 // indirect
 	github.com/btcsuite/btcwallet/wallet/txrules v1.2.0 // indirect
-	github.com/btcsuite/btcwallet/wallet/txsizes v1.1.0 // indirect
+	github.com/btcsuite/btcwallet/wallet/txsizes v1.2.3 // indirect
 	github.com/btcsuite/btcwallet/walletdb v1.4.0 // indirect
 	github.com/btcsuite/btcwallet/wtxmgr v1.5.0 // indirect
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
