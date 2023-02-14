@@ -145,7 +145,7 @@ metadata:
 rules:
   - apiGroups: [ "" ]
     resources: [ "secrets" ]
-    verbs: [ "get", "list", "watch", "update" ]
+    verbs: [ "get", "list", "create", "watch", "update", "patch" ]
 
 
 ---
