@@ -1,8 +1,9 @@
-FROM golang:1.17.6-alpine
+FROM golang:1.19
 
-RUN apk add --no-cache --update alpine-sdk git
+RUN apt-get update && apt-get install -y git
 ENV GOCACHE=/tmp/build/.cache
 ENV GOMODCACHE=/tmp/build/.modcache
+ENV GOFLAGS="-buildvcs=false"
 
 COPY . /tmp/tools
 

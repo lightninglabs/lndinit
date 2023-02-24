@@ -1,7 +1,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -28,10 +28,10 @@ func TestReadInput(t *testing.T) {
 }
 
 func writeToTempFile(t *testing.T, data []byte) string {
-	tempFileName, err := ioutil.TempFile("", "*.txt")
+	tempFileName, err := os.CreateTemp("", "*.txt")
 	require.NoError(t, err)
 
-	err = ioutil.WriteFile(tempFileName.Name(), data, 0600)
+	err = os.WriteFile(tempFileName.Name(), data, 0600)
 	require.NoError(t, err)
 
 	return tempFileName.Name()
