@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -144,7 +143,7 @@ func readFile(fileName string) (string, error) {
 			errInputMissing)
 	}
 
-	byteContent, err := ioutil.ReadFile(fileName)
+	byteContent, err := os.ReadFile(fileName)
 	if err != nil {
 		return "", fmt.Errorf("error reading file %s: %v", fileName,
 			err)
