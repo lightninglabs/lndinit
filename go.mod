@@ -2,11 +2,11 @@ module github.com/lightninglabs/lndinit
 
 require (
 	github.com/btcsuite/btcd v0.23.5-0.20230228185050-38331963bddd
-	github.com/btcsuite/btcwallet v0.16.9
+	github.com/btcsuite/btcwallet v0.16.10-0.20230517173256-aa62c04afcdf
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/kkdai/bstream v1.0.0
 	github.com/lightninglabs/protobuf-hex-display v1.4.3-hex-display
-	github.com/lightningnetwork/lnd v0.16.2-beta
+	github.com/lightningnetwork/lnd v0.16.3-beta
 	github.com/stretchr/testify v1.8.1
 	google.golang.org/grpc v1.41.0
 	k8s.io/api v0.18.3
