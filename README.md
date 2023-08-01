@@ -404,3 +404,52 @@ $ if [[ $ret -eq 0 ]]; then
   fi
 ```
 
+---
+
+## Release Process
+
+This project is updated less often than `lnd`, so there are two main aspects to
+the release process. When a new `lnd` is released, and it's compatible with
+existing `lndinit` binary, only the container image needs to be built.
+
+### Binary release
+
+When binary changes are required (either for dependency upgrades, or to maintain
+compatibility with a new `lnd` release) the `lndinit` binary must be rebuilt:
+
+1. Apply the necessary code changes.
+2. Adjust the relevant version constant(s) in `version.go`.
+    - Usually this will be incrementing `AppPatch`.
+3. Open PR and have it merged.
+4. A maintainer must push a git-tag with the new version:
+    - `git checkout main && git pull`
+    - `TAG=v0.<minor>.<patch>-beta` (e.g.: `TAG=v0.1.15-beta`)
+    - `git tag $TAG && git push $TAG`
+
+Then proceed to the container image release process.
+
+### Container image release
+
+When a new version of `lnd` is released, a new `lndinit` container image build
+is triggered by pushing a tag with the format:
+`docker/<lndinit_version>-lnd-<lnd_version>`
+
+For example, to build an image based on lnd `v0.16.4-beta`, which includes
+lndinit `v0.1.15-beta`:
+
+```
+LNDINIT_VERSION=v0.1.15-beta
+LND_VERSION=v0.16.4-beta
+
+git checkout $LNDINIT_VERSION
+git tag docker/${LNDINIT_VERSION}-lnd-${LND_VERSION}
+git push docker/${LNDINIT_VERSION}-lnd-${LND_VERSION}
+```
+
+If lnd `v0.16.5-beta` is released and does not require additional `lndinit`
+binary changes, the desired image can be built by re-running the previous
+command with the lnd version adjusted. _In this case, there's no need to modify
+any code in this repo._
+
+For more detail, refer to the [docker.yml](.github/workflows/docker.yml)
+Github workflow.
