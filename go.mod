@@ -1,14 +1,14 @@
 module github.com/lightninglabs/lndinit
 
 require (
-	github.com/btcsuite/btcd v0.23.5-0.20230711222809-7faa9b266231
-	github.com/btcsuite/btcwallet v0.16.10-0.20230804184612-07be54bc22cf
+	github.com/btcsuite/btcd v0.23.5-0.20230905170901-80f5a0ffdf36
+	github.com/btcsuite/btcwallet v0.16.10-0.20231017144732-e3ff37491e9c
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/kkdai/bstream v1.0.0
 	github.com/lightninglabs/protobuf-hex-display v1.4.3-hex-display
-	github.com/lightningnetwork/lnd v0.17.0-beta.rc2
+	github.com/lightningnetwork/lnd v0.17.1-beta
 	github.com/stretchr/testify v1.8.2
-	google.golang.org/grpc v1.53.0
+	google.golang.org/grpc v1.56.3
 	k8s.io/api v0.18.3
 	k8s.io/apimachinery v0.18.3
 	k8s.io/client-go v0.18.3
@@ -21,7 +21,7 @@ require (
 	github.com/andybalholm/brotli v1.0.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2 // indirect
-	github.com/btcsuite/btcd/btcutil v1.1.3 // indirect
+	github.com/btcsuite/btcd/btcutil v1.1.4-0.20230904040416-d4f519f5dc05 // indirect
 	github.com/btcsuite/btcd/btcutil/psbt v1.1.8 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2 // indirect
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f // indirect
@@ -49,7 +49,7 @@ require (
 	github.com/gofrs/uuid v4.2.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.4.2 // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/btree v1.0.1 // indirect
 	github.com/google/gofuzz v1.1.0 // indirect
@@ -62,6 +62,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.5.0 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.14.0 // indirect
+	github.com/jackc/pgerrcode v0.0.0-20220416144525-469b46aa5efa // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgproto3/v2 v2.3.2 // indirect
@@ -82,19 +83,18 @@ require (
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/klauspost/compress v1.13.6 // indirect
 	github.com/klauspost/pgzip v1.2.5 // indirect
-	github.com/kr/pretty v0.2.1 // indirect
 	github.com/lib/pq v1.10.3 // indirect
 	github.com/lightninglabs/gozmq v0.0.0-20191113021534-d20a764486bf // indirect
 	github.com/lightninglabs/neutrino v0.16.0 // indirect
 	github.com/lightninglabs/neutrino/cache v1.1.1 // indirect
 	github.com/lightningnetwork/lightning-onion v1.2.1-0.20230823005744-06182b1d7d2f // indirect
-	github.com/lightningnetwork/lnd/clock v1.1.0 // indirect
-	github.com/lightningnetwork/lnd/healthcheck v1.2.2 // indirect
-	github.com/lightningnetwork/lnd/kvdb v1.4.2 // indirect
-	github.com/lightningnetwork/lnd/queue v1.1.0 // indirect
-	github.com/lightningnetwork/lnd/ticker v1.1.0 // indirect
-	github.com/lightningnetwork/lnd/tlv v1.1.0 // indirect
-	github.com/lightningnetwork/lnd/tor v1.1.1 // indirect
+	github.com/lightningnetwork/lnd/clock v1.1.1 // indirect
+	github.com/lightningnetwork/lnd/healthcheck v1.2.3 // indirect
+	github.com/lightningnetwork/lnd/kvdb v1.4.4 // indirect
+	github.com/lightningnetwork/lnd/queue v1.1.1 // indirect
+	github.com/lightningnetwork/lnd/ticker v1.1.1 // indirect
+	github.com/lightningnetwork/lnd/tlv v1.1.1 // indirect
+	github.com/lightningnetwork/lnd/tor v1.1.2 // indirect
 	github.com/ltcsuite/ltcd v0.0.0-20190101042124-f37f8bf35796 // indirect
 	github.com/mattn/go-isatty v0.0.16 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
@@ -143,15 +143,14 @@ require (
 	golang.org/x/exp v0.0.0-20230315142452-642cacee5cc0 // indirect
 	golang.org/x/mod v0.10.0 // indirect
 	golang.org/x/net v0.10.0 // indirect
-	golang.org/x/oauth2 v0.4.0 // indirect
-	golang.org/x/sync v0.2.0 // indirect
+	golang.org/x/oauth2 v0.7.0 // indirect
 	golang.org/x/sys v0.8.0 // indirect
 	golang.org/x/term v0.8.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
-	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba // indirect
+	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65 // indirect
 	golang.org/x/tools v0.9.1 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20230110181048-76db0878b65f // indirect
+	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/errgo.v1 v1.0.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
