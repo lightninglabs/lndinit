@@ -10,6 +10,7 @@ initialization, including seed and password generation.
   - [`gen-seed`](#gen-seed)
   - [`load-secret`](#load-secret)
   - [`store-secret`](#store-secret)
+  - [`store-configmap`](#store-configmap)
   - [`init-wallet`](#init-wallet)
   - [`wait-ready`](#wait-ready)
 - [Example usage](#example-usage)
@@ -47,6 +48,9 @@ No `lnd` needed, but seed will be in `lnd`-specific [`aezeed` format](https://gi
 
 ### store-secret
 `store-secret` interacts with kubernetes to write to secrets (no `lnd` needed)
+
+### store-configmap
+`store-configmap` interacts with kubernetes to write to configmaps (no `lnd` needed)
 
 ### init-wallet
 `init-wallet` has two modes:

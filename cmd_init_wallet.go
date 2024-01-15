@@ -239,12 +239,13 @@ func (x *initWalletCommand) readInput(requireSeed bool) (string, string, string,
 
 	// Read passphrase from Kubernetes secret.
 	case storageK8s:
-		k8sSecret := &k8sSecretOptions{
+		k8sSecret := &k8sObjectOptions{
 			Namespace:  x.K8s.Namespace,
-			SecretName: x.K8s.SecretName,
+			Name:       x.K8s.SecretName,
+			KeyName:    x.K8s.SeedKeyName,
 			Base64:     x.K8s.Base64,
+			ObjectType: ObjectTypeSecret,
 		}
-		k8sSecret.SecretKeyName = x.K8s.SeedKeyName
 
 		if requireSeed {
 			log("Reading seed from k8s secret %s (namespace %s)",
@@ -260,7 +261,7 @@ func (x *initWalletCommand) readInput(requireSeed bool) (string, string, string,
 			log("Reading seed passphrase from k8s secret %s "+
 				"(namespace %s)", x.K8s.SecretName,
 				x.K8s.Namespace)
-			k8sSecret.SecretKeyName = x.K8s.SeedPassphraseKeyName
+			k8sSecret.KeyName = x.K8s.SeedPassphraseKeyName
 			seedPassPhrase, _, err = readK8s(k8sSecret)
 			if err != nil {
 				return "", "", "", err
@@ -269,7 +270,7 @@ func (x *initWalletCommand) readInput(requireSeed bool) (string, string, string,
 
 		log("Reading wallet password from k8s secret %s (namespace %s)",
 			x.K8s.SecretName, x.K8s.Namespace)
-		k8sSecret.SecretKeyName = x.K8s.WalletPasswordKeyName
+		k8sSecret.KeyName = x.K8s.WalletPasswordKeyName
 		walletPassword, _, err = readK8s(k8sSecret)
 		if err != nil {
 			return "", "", "", err

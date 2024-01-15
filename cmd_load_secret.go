@@ -37,7 +37,15 @@ func (x *loadSecretCommand) Register(parser *flags.Parser) error {
 func (x *loadSecretCommand) Execute(_ []string) error {
 	switch x.Source {
 	case storageK8s:
-		content, secret, err := readK8s(x.K8s)
+		objectOpts := &k8sObjectOptions{
+			Namespace:  x.K8s.Namespace,
+			Name:       x.K8s.SecretName,
+			KeyName:    x.K8s.SecretKeyName,
+			Base64:     x.K8s.Base64,
+			ObjectType: ObjectTypeSecret,
+		}
+
+		content, secret, err := readK8s(objectOpts)
 		if err != nil {
 			return fmt.Errorf("error reading secret %s in "+
 				"namespace %s: %v", x.K8s.SecretName,
