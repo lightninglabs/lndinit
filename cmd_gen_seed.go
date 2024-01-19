@@ -68,7 +68,15 @@ func (x *genSeedCommand) Execute(_ []string) error {
 
 	// Read passphrase from Kubernetes secret.
 	case x.PassphraseK8s.AnySet():
-		passPhrase, _, err = readK8s(x.PassphraseK8s)
+		k8sSecret := &k8sObjectOptions{
+			Namespace:  x.PassphraseK8s.Namespace,
+			Name:       x.PassphraseK8s.SecretName,
+			KeyName:    x.PassphraseK8s.SecretKeyName,
+			Base64:     x.PassphraseK8s.Base64,
+			ObjectType: ObjectTypeSecret,
+		}
+
+		passPhrase, _, err = readK8s(k8sSecret)
 
 	}
 	if err != nil {

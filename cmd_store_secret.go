@@ -10,28 +10,28 @@ import (
 	"github.com/jessevdk/go-flags"
 )
 
-type targetK8s struct {
+type targetK8sSecret struct {
 	k8sSecretOptions
 
 	Helm *helmOptions `group:"Flags for configuring the Helm annotations (use when --target=k8s)" namespace:"helm"`
 }
 
-type secretEntry struct {
+type entry struct {
 	key   string
 	value string
 }
 
 type storeSecretCommand struct {
-	Batch     bool       `long:"batch" description:"Instead of reading one secret from stdin, read all files of the argument list and store them as entries in the secret"`
-	Overwrite bool       `long:"overwrite" description:"Overwrite existing secret entries instead of aborting"`
-	Target    string     `long:"target" short:"t" description:"Secret storage target" choice:"k8s"`
-	K8s       *targetK8s `group:"Flags for storing the secret as a value inside a Kubernetes Secret (use when --target=k8s)" namespace:"k8s"`
+	Batch     bool             `long:"batch" description:"Instead of reading one secret from stdin, read all files of the argument list and store them as entries in the secret"`
+	Overwrite bool             `long:"overwrite" description:"Overwrite existing secret entries instead of aborting"`
+	Target    string           `long:"target" short:"t" description:"Secret storage target" choice:"k8s"`
+	K8s       *targetK8sSecret `group:"Flags for storing the secret as a value inside a Kubernetes Secret (use when --target=k8s)" namespace:"k8s"`
 }
 
 func newStoreSecretCommand() *storeSecretCommand {
 	return &storeSecretCommand{
 		Target: storageK8s,
-		K8s: &targetK8s{
+		K8s: &targetK8sSecret{
 			k8sSecretOptions: k8sSecretOptions{
 				Namespace: defaultK8sNamespace,
 			},
@@ -59,7 +59,7 @@ func (x *storeSecretCommand) Register(parser *flags.Parser) error {
 }
 
 func (x *storeSecretCommand) Execute(args []string) error {
-	var entries []*secretEntry
+	var entries []*entry
 
 	switch {
 	case x.Batch && len(args) == 0:
@@ -75,7 +75,7 @@ func (x *storeSecretCommand) Execute(args []string) error {
 					file, err)
 			}
 
-			entries = append(entries, &secretEntry{
+			entries = append(entries, &entry{
 				key:   filepath.Base(file),
 				value: content,
 			})
@@ -88,7 +88,7 @@ func (x *storeSecretCommand) Execute(args []string) error {
 			return fmt.Errorf("error reading secret from stdin: %v",
 				err)
 		}
-		entries = append(entries, &secretEntry{value: secret})
+		entries = append(entries, &entry{value: secret})
 	}
 
 	switch x.Target {
@@ -106,7 +106,7 @@ func (x *storeSecretCommand) Execute(args []string) error {
 	}
 }
 
-func storeSecretsK8s(entries []*secretEntry, opts *targetK8s,
+func storeSecretsK8s(entries []*entry, opts *targetK8sSecret,
 	overwrite bool) error {
 
 	if opts.SecretName == "" {
@@ -118,15 +118,16 @@ func storeSecretsK8s(entries []*secretEntry, opts *targetK8s,
 			return fmt.Errorf("secret key name is required")
 		}
 
-		entryOpts := &k8sSecretOptions{
-			Namespace:     opts.Namespace,
-			SecretName:    opts.SecretName,
-			SecretKeyName: entry.key,
-			Base64:        opts.Base64,
+		entryOpts := &k8sObjectOptions{
+			Namespace:  opts.Namespace,
+			Name:       opts.SecretName,
+			KeyName:    entry.key,
+			Base64:     opts.Base64,
+			ObjectType: ObjectTypeSecret,
 		}
 
 		log("Storing key with name %s to secret %s in namespace %s",
-			entryOpts.SecretKeyName, entryOpts.SecretName,
+			entryOpts.KeyName, entryOpts.Name,
 			entryOpts.Namespace)
 		err := saveK8s(entry.value, entryOpts, overwrite, opts.Helm)
 		if err != nil {
