@@ -1,6 +1,6 @@
 ARG GO_VERSION=1.22.3
 ARG BASE_IMAGE=lightninglabs/lnd
-ARG BASE_IMAGE_VERSION=v0.18.0-beta
+ARG BASE_IMAGE_VERSION=v0.18.3-beta.rc1
 
 FROM golang:${GO_VERSION}-alpine as builder
 
@@ -18,10 +18,10 @@ ARG git_url="https://github.com/lightninglabs/lndinit"
 RUN apk add --no-cache --update alpine-sdk \
   git \
   make \
-&&  git clone $git_url /go/src/github.com/lightninglabs/lndinit \
-&&  cd /go/src/github.com/lightninglabs/lndinit \
-&&  git checkout $checkout \
-&&  make release-install
+  &&  git clone $git_url /go/src/github.com/lightninglabs/lndinit \
+  &&  cd /go/src/github.com/lightninglabs/lndinit \
+  &&  git checkout $checkout \
+  &&  make release-install
 
 # Start a new, final image.
 FROM ${BASE_IMAGE}:${BASE_IMAGE_VERSION} as final
