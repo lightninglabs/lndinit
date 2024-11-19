@@ -8,12 +8,15 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcwallet/walletdb"
 	"github.com/jessevdk/go-flags"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/kvdb/etcd"
 	"github.com/lightningnetwork/lnd/kvdb/postgres"
+	"github.com/lightningnetwork/lnd/kvdb/sqlbase"
+	"github.com/lightningnetwork/lnd/kvdb/sqlite"
 	"github.com/lightningnetwork/lnd/lncfg"
 	"github.com/lightningnetwork/lnd/signal"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -27,6 +30,9 @@ var (
 
 	// etcdTimeout is the time we allow a single etcd transaction to take.
 	etcdTimeout = time.Second * 5
+
+	// defaultDataDir is the default data directory for lnd.
+	defaultDataDir = filepath.Join(btcutil.AppDataDir("lnd", false), "data")
 )
 
 const (
@@ -40,7 +46,12 @@ type Bolt struct {
 	DBTimeout time.Duration `long:"dbtimeout" description:"Specify the timeout value used when opening the database."`
 	DataDir   string        `long:"data-dir" description:"Lnd data dir where bolt dbs are located."`
 	TowerDir  string        `long:"tower-dir" description:"Lnd watchtower dir where bolt dbs for the watchtower server are located."`
-	Network   string        `long:"network" description:"Network within data dir where bolt dbs are located."`
+}
+
+type Sqlite struct {
+	DataDir  string         `long:"data-dir" description:"Lnd data dir where sqlite dbs are located."`
+	TowerDir string         `long:"tower-dir" description:"Lnd watchtower dir where sqlite dbs for the watchtower server are located."`
+	Config   *sqlite.Config `group:"sqlite-config" namespace:"sqlite-config" description:"Sqlite config."`
 }
 
 type DB struct {
@@ -48,20 +59,40 @@ type DB struct {
 	Etcd     *etcd.Config     `group:"etcd" namespace:"etcd" description:"Etcd settings."`
 	Bolt     *Bolt            `group:"bolt" namespace:"bolt" description:"Bolt settings."`
 	Postgres *postgres.Config `group:"postgres" namespace:"postgres" description:"Postgres settings."`
+	Sqlite   *Sqlite          `group:"sqlite" namespace:"sqlite" description:"Sqlite settings."`
 }
 
-func (d *DB) isRemote() bool {
-	return d.Backend == lncfg.EtcdBackend ||
-		d.Backend == lncfg.PostgresBackend
+// Init should be called upon start to pre-initialize database for sql
+// backends. If max connections are not set, the amount of connections will be
+// unlimited however we only use one connection during the migration.
+func (db *DB) Init() error {
+	// Start embedded etcd server if requested.
+	switch {
+	case db.Backend == lncfg.PostgresBackend:
+		sqlbase.Init(db.Postgres.MaxConnections)
+
+	case db.Backend == lncfg.SqliteBackend:
+		sqlbase.Init(db.Sqlite.Config.MaxConnections)
+	}
+
+	return nil
 }
 
-func (d *DB) isEtcd() bool {
-	return d.Backend == lncfg.EtcdBackend
+// isBoltDB returns true if the db is a type bolt db.
+func (db *DB) isRemote() bool {
+	return db.Backend == lncfg.EtcdBackend ||
+		db.Backend == lncfg.PostgresBackend ||
+		db.Backend == lncfg.SqliteBackend
+}
+
+func (db *DB) isEtcd() bool {
+	return db.Backend == lncfg.EtcdBackend
 }
 
 type migrateDBCommand struct {
-	Source *DB `group:"source" namespace:"source" long:"source" short:"s" description:"The source database where the data is read from"`
-	Dest   *DB `group:"dest" namespace:"dest" long:"dest" short:"d" description:"The destination database where the data is written to"`
+	Source  *DB    `group:"source" namespace:"source" long:"source" short:"s" description:"The source database where the data is read from"`
+	Dest    *DB    `group:"dest" namespace:"dest" long:"dest" short:"d" description:"The destination database where the data is written to"`
+	Network string `long:"network" short:"n" description:"Network of the db files to migrate (used to navigate into the right directory)"`
 }
 
 func newMigrateDBCommand() *migrateDBCommand {
@@ -71,9 +102,15 @@ func newMigrateDBCommand() *migrateDBCommand {
 			Etcd:    &etcd.Config{},
 			Bolt: &Bolt{
 				DBTimeout: kvdb.DefaultDBTimeout,
-				Network:   "mainnet",
+				TowerDir:  defaultDataDir,
+				DataDir:   defaultDataDir,
 			},
 			Postgres: &postgres.Config{},
+			Sqlite: &Sqlite{
+				Config:   &sqlite.Config{},
+				TowerDir: defaultDataDir,
+				DataDir:  defaultDataDir,
+			},
 		},
 		Dest: &DB{
 			Backend: lncfg.EtcdBackend,
@@ -82,10 +119,17 @@ func newMigrateDBCommand() *migrateDBCommand {
 			},
 			Bolt: &Bolt{
 				DBTimeout: kvdb.DefaultDBTimeout,
-				Network:   "mainnet",
+				TowerDir:  defaultDataDir,
+				DataDir:   defaultDataDir,
 			},
 			Postgres: &postgres.Config{},
+			Sqlite: &Sqlite{
+				Config:   &sqlite.Config{},
+				TowerDir: defaultDataDir,
+				DataDir:  defaultDataDir,
+			},
 		},
+		Network: "regtest",
 	}
 }
 
@@ -141,20 +185,21 @@ func (x *migrateDBCommand) Execute(_ []string) error {
 	for _, prefix := range prefixes {
 		log("Migrating DB with prefix %s", prefix)
 
-		srcDb, err := openDb(x.Source, prefix)
-		if err != nil {
-			if err == walletdb.ErrDbDoesNotExist &&
-				x.Source.Backend == lncfg.BoltBackend {
+		srcDb, err := openDb(x.Source, prefix, x.Network)
 
-				log("Skipping DB with prefix %s because "+
-					"source does not exist", prefix)
-				continue
-			}
-			return err
+		// This is only for now done for bolt dbs because other backends
+		// do not special case this error for now. For example if
+		// we do not run the watcher tower functionaliy we might not
+		// have a towerclient.db so we skip this error.
+		if err == walletdb.ErrDbDoesNotExist &&
+			x.Source.Backend == lncfg.BoltBackend {
+
+			log("Skipping DB with prefix %s because "+
+				"source does not exist", prefix)
+			continue
 		}
-		log("Opened source DB")
 
-		destDb, err := openDb(x.Dest, prefix)
+		destDb, err := openDb(x.Dest, prefix, x.Network)
 		if err != nil {
 			return err
 		}
@@ -183,10 +228,14 @@ func (x *migrateDBCommand) Execute(_ []string) error {
 		// to the channel DB as that is the only DB that has migrations.
 		log("Checking DB version of source DB")
 		if prefix == lncfg.NSChannelDB {
-			if err := checkMigrationsApplied(srcDb); err != nil {
+			err := checkChannelDBMigrationsApplied(srcDb)
+			if err != nil {
 				return err
 			}
 		}
+
+		// TODO(ziggie): Also check other DBs for migrations like the
+		// wtclient.db as soon as LND 19 is tagged.
 
 		// Also make sure that the destination DB hasn't been marked as
 		// successfully having been the target of a migration. We only
@@ -242,6 +291,9 @@ func (x *migrateDBCommand) Execute(_ []string) error {
 		if err := addMarker(destDb, alreadyMigratedKey); err != nil {
 			return err
 		}
+
+		log("Migration of DB with prefix %s completed successfully",
+			prefix)
 	}
 
 	return nil
@@ -382,21 +434,30 @@ func (x *migrateDBCommand) migrateEtcd(srcTx walletdb.ReadWriteTx,
 	return nil
 }
 
-func openDb(cfg *DB, prefix string) (walletdb.DB, error) {
+func openDb(cfg *DB, prefix, network string) (walletdb.DB, error) {
 	backend := cfg.Backend
 
-	var args []interface{}
+	// Init the db connections for sql backends.
+	err := cfg.Init()
+	if err != nil {
+		return nil, err
+	}
 
-	graphDir := filepath.Join(cfg.Bolt.DataDir, "graph", cfg.Bolt.Network)
-	walletDir := filepath.Join(
-		cfg.Bolt.DataDir, "chain", "bitcoin", cfg.Bolt.Network,
-	)
-	towerServerDir := filepath.Join(
-		cfg.Bolt.TowerDir, "bitcoin", cfg.Bolt.Network,
-	)
+	// Settings to open a particular db backend.
+	var args []interface{}
 
 	switch backend {
 	case lncfg.BoltBackend:
+		// Directories where the db files are located.
+		graphDir := filepath.Join(cfg.Bolt.DataDir, "graph", network)
+		walletDir := filepath.Join(
+			cfg.Bolt.DataDir, "chain", "bitcoin", network,
+		)
+		towerServerDir := filepath.Join(
+			cfg.Bolt.TowerDir, "bitcoin", network,
+		)
+
+		// Path to the db file.
 		var path string
 		switch prefix {
 		case lncfg.NSChannelDB:
@@ -443,12 +504,67 @@ func openDb(cfg *DB, prefix string) (walletdb.DB, error) {
 		args = []interface{}{
 			context.Background(),
 			&postgres.Config{
-				Dsn: cfg.Postgres.Dsn,
+				Dsn:            cfg.Postgres.Dsn,
+				Timeout:        time.Minute,
+				MaxConnections: 10,
 			},
 			prefix,
 		}
+
 		log("Opening postgres backend at %s with prefix '%s'",
 			cfg.Postgres.Dsn, prefix)
+
+	case kvdb.SqliteBackendName:
+		// Directories where the db files are located.
+		graphDir := filepath.Join(cfg.Sqlite.DataDir, "graph", network)
+		walletDir := filepath.Join(
+			cfg.Sqlite.DataDir, "chain", "bitcoin", network,
+		)
+		towerServerDir := filepath.Join(
+			cfg.Sqlite.TowerDir, "bitcoin", network,
+		)
+
+		var dbName string
+		var path string
+		switch prefix {
+		case lncfg.NSChannelDB:
+			path = graphDir
+			dbName = lncfg.SqliteChannelDBName
+		case lncfg.NSMacaroonDB:
+			path = walletDir
+			dbName = lncfg.SqliteChainDBName
+
+		case lncfg.NSDecayedLogDB:
+			path = graphDir
+			dbName = lncfg.SqliteChannelDBName
+
+		case lncfg.NSTowerClientDB:
+			path = graphDir
+			dbName = lncfg.SqliteChannelDBName
+
+		case lncfg.NSTowerServerDB:
+			path = towerServerDir
+			dbName = lncfg.SqliteChannelDBName
+
+		case lncfg.NSWalletDB:
+			path = walletDir
+			dbName = lncfg.SqliteChainDBName
+
+		case lncfg.NSNeutrinoDB:
+			dbName = lncfg.SqliteNeutrinoDBName
+		}
+
+		args = []interface{}{
+			context.Background(),
+			&sqlite.Config{
+				Timeout: time.Minute,
+			},
+			path,
+			dbName,
+			prefix,
+		}
+
+		log("Opening sqlite backend with prefix '%s'", prefix)
 
 	default:
 		return nil, fmt.Errorf("unknown backend: %v", backend)
@@ -548,7 +664,7 @@ func addMarker(db walletdb.DB, markerKey []byte) error {
 	return rwtx.Commit()
 }
 
-func checkMigrationsApplied(db walletdb.DB) error {
+func checkChannelDBMigrationsApplied(db walletdb.DB) error {
 	var meta channeldb.Meta
 	err := kvdb.View(db, func(tx kvdb.RTx) error {
 		return channeldb.FetchMeta(&meta, tx)
