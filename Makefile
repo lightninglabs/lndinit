@@ -22,10 +22,11 @@ XARGS := xargs -L 1
 
 VERSION_TAG = $(shell git describe --tags)
 
-DEV_TAGS = kvdb_etcd kvdb_postgres
+DEV_TAGS = kvdb_etcd kvdb_postgres kvdb_sqlite
 RELEASE_TAGS = $(DEV_TAGS)
 
 BUILD_SYSTEM = darwin-amd64 \
+darwin-arm64 \
 linux-386 \
 linux-amd64 \
 linux-armv6 \
@@ -108,7 +109,7 @@ scratch: build
 
 unit: 
 	@$(call print, "Running unit tests.")
-	$(GOTEST) ./...
+	$(GOTEST) -tags="$(DEV_TAGS)" ./...
 
 fmt: $(GOIMPORTS_BIN)
 	@$(call print, "Fixing imports.")
@@ -118,7 +119,7 @@ fmt: $(GOIMPORTS_BIN)
 
 lint: docker-tools
 	@$(call print, "Linting source.")
-	$(DOCKER_TOOLS) golangci-lint run -v $(LINT_WORKERS)
+	$(DOCKER_TOOLS) golangci-lint run -v --build-tags="$(DEV_TAGS)"$(LINT_WORKERS)
 
 vendor:
 	@$(call print, "Re-creating vendor directory.")
