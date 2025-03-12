@@ -159,7 +159,7 @@ func (x *initWalletCommand) Execute(_ []string) error {
 		if x.InitRpc.WatchOnly {
 			// For initializing a watch-only wallet we need the
 			// accounts JSON file.
-			log("Reading accounts from file")
+			logger.Info("Reading accounts from file")
 			accountsBytes, err := readFile(x.InitRpc.AccountsFile)
 			if err != nil {
 				return err
@@ -215,7 +215,7 @@ func (x *initWalletCommand) readInput(requireSeed bool) (string, string, string,
 	// Read all secrets from individual files.
 	case storageFile:
 		if requireSeed {
-			log("Reading seed from file")
+			logger.Info("Reading seed from file")
 			seed, err = readFile(x.File.Seed)
 			if err != nil {
 				return "", "", "", err
@@ -224,14 +224,14 @@ func (x *initWalletCommand) readInput(requireSeed bool) (string, string, string,
 
 		// The seed passphrase is optional.
 		if x.File.SeedPassphrase != "" {
-			log("Reading seed passphrase from file")
+			logger.Info("Reading seed passphrase from file")
 			seedPassPhrase, err = readFile(x.File.SeedPassphrase)
 			if err != nil {
 				return "", "", "", err
 			}
 		}
 
-		log("Reading wallet password from file")
+		logger.Info("Reading wallet password from file")
 		walletPassword, err = readFile(x.File.WalletPassword)
 		if err != nil {
 			return "", "", "", err
@@ -248,7 +248,7 @@ func (x *initWalletCommand) readInput(requireSeed bool) (string, string, string,
 		}
 
 		if requireSeed {
-			log("Reading seed from k8s secret %s (namespace %s)",
+			logger.Infof("Reading seed from k8s secret %s (namespace %s)",
 				x.K8s.SecretName, x.K8s.Namespace)
 			seed, _, err = readK8s(k8sSecret)
 			if err != nil {
@@ -258,7 +258,7 @@ func (x *initWalletCommand) readInput(requireSeed bool) (string, string, string,
 
 		// The seed passphrase is optional.
 		if x.K8s.SeedPassphraseKeyName != "" {
-			log("Reading seed passphrase from k8s secret %s "+
+			logger.Infof("Reading seed passphrase from k8s secret %s "+
 				"(namespace %s)", x.K8s.SecretName,
 				x.K8s.Namespace)
 			k8sSecret.KeyName = x.K8s.SeedPassphraseKeyName
@@ -268,7 +268,7 @@ func (x *initWalletCommand) readInput(requireSeed bool) (string, string, string,
 			}
 		}
 
-		log("Reading wallet password from k8s secret %s (namespace %s)",
+		logger.Infof("Reading wallet password from k8s secret %s (namespace %s)",
 			x.K8s.SecretName, x.K8s.Namespace)
 		k8sSecret.KeyName = x.K8s.WalletPasswordKeyName
 		walletPassword, _, err = readK8s(k8sSecret)
@@ -329,7 +329,7 @@ func createWalletFile(cipherSeed *aezeed.CipherSeed, walletPassword, walletDir,
 func createWallet(walletDir string, cipherSeed *aezeed.CipherSeed,
 	walletPassword []byte, network string) error {
 
-	log("Creating new wallet in %s", walletDir)
+	logger.Infof("Creating new wallet in %s", walletDir)
 
 	// The network parameters are needed for some wallet internal things
 	// like the chain genesis hash and timestamp.
@@ -358,7 +358,7 @@ func createWallet(walletDir string, cipherSeed *aezeed.CipherSeed,
 			err)
 	}
 
-	log("Wallet created successfully in %s", walletDir)
+	logger.Infof("Wallet created successfully in %s", walletDir)
 
 	return nil
 }
@@ -366,7 +366,7 @@ func createWallet(walletDir string, cipherSeed *aezeed.CipherSeed,
 func validateWallet(walletDir string, walletPassword []byte,
 	network string) error {
 
-	log("Validating password for wallet in %s", walletDir)
+	logger.Infof("Validating password for wallet in %s", walletDir)
 
 	// The network parameters are needed for some wallet internal things
 	// like the chain genesis hash and timestamp.
@@ -391,7 +391,7 @@ func validateWallet(walletDir string, walletPassword []byte,
 			err)
 	}
 
-	log("Wallet password validated successfully")
+	logger.Info("Wallet password validated successfully")
 
 	return nil
 }

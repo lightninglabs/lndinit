@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/btcsuite/btclog/v2"
 	"github.com/jessevdk/go-flags"
 	"github.com/lightningnetwork/lnd/lncfg"
 	"github.com/lightningnetwork/lnd/lnrpc"
@@ -30,13 +31,9 @@ const (
 	defaultRPCServer = "localhost:" + defaultRPCPort
 )
 
-var (
-	log logger = noopLogger
-)
-
 type globalOptions struct {
-	ErrorOnExisting bool `long:"error-on-existing" short:"e" description:"Exit with code EXIT_CODE_TARGET_EXISTS (128) instead of 0 if the result of an action is already present"`
-	Verbose         bool `long:"verbose" short:"v" description:"Turn on logging to stderr"`
+	ErrorOnExisting bool   `long:"error-on-existing" short:"e" description:"Exit with code EXIT_CODE_TARGET_EXISTS (128) instead of 0 if the result of an action is already present"`
+	DebugLevel      string `long:"debuglevel" short:"d" description:"Set the log level (Off, Critical, Error, Warn, Info, Debug, Trace)"`
 }
 
 func main() {
@@ -46,17 +43,25 @@ func main() {
 	// just the global options, we do a pre-parsing without any commands
 	// registered yet. We ignore any errors as that'll be handled later.
 	_, _ = flags.NewParser(globalOpts, flags.IgnoreUnknown).Parse()
-	if globalOpts.Verbose {
-		log = stderrLogger
-	}
 
-	log("Version %s commit=%s, debuglevel=debug", Version(), Commit)
+	logger.Info("Version %s commit=%s, debuglevel=debug", Version(), Commit)
+
+	if globalOpts.DebugLevel != "" {
+		level, ok := btclog.LevelFromString(globalOpts.DebugLevel)
+		if !ok {
+			logger.Errorf("Invalid debug level %s, "+
+				"using info", globalOpts.DebugLevel)
+			level = btclog.LevelInfo
+		}
+
+		logger.SetLevel(level)
+	}
 
 	parser := flags.NewParser(
 		globalOpts, flags.HelpFlag|flags.PassDoubleDash,
 	)
 	if err := registerCommands(parser); err != nil {
-		stderrLogger("Command parser error: %v", err)
+		logger.Errorf("Command parser error: %v", err)
 		os.Exit(ExitCodeFailure)
 	}
 
@@ -66,7 +71,7 @@ func main() {
 		case isFlagErr:
 			if flagErr.Type != flags.ErrHelp {
 				// Print error if not due to help request.
-				stderrLogger("Config error: %v", err)
+				logger.Errorf("Config error: %v", err)
 				os.Exit(ExitCodeFailure)
 			} else {
 				// Help was requested, print without any log
@@ -82,21 +87,21 @@ func main() {
 			// logging here. The default is quietly aborting if the
 			// target already exists.
 			if globalOpts.ErrorOnExisting {
-				log("Failing on state error: %v", err)
+				logger.Errorf("Failing on state error: %v", err)
 				os.Exit(ExitCodeTargetExists)
 			}
 
-			log("Ignoring non-fatal error: %v", err)
+			logger.Errorf("Ignoring non-fatal error: %v", err)
 			os.Exit(ExitCodeSuccess)
 
 		// Ugh, can't use errors.Is() here because the flag parser does
 		// not wrap the returned errors properly.
 		case strings.Contains(err.Error(), errInputMissing):
-			stderrLogger("Input error: %v", err)
+			logger.Errorf("Input error: %v", err)
 			os.Exit(ExitCodeInputMissing)
 
 		default:
-			stderrLogger("Runtime error: %v", err)
+			logger.Errorf("Runtime error: %v", err)
 			os.Exit(ExitCodeFailure)
 		}
 	}
@@ -112,8 +117,8 @@ func registerCommands(parser *flags.Parser) error {
 	commands := []subCommand{
 		newGenPasswordCommand(),
 		newGenSeedCommand(),
-		newLoadSecretCommand(),
 		newInitWalletCommand(),
+		newLoadSecretCommand(),
 		newStoreSecretCommand(),
 		newStoreConfigmapCommand(),
 		newWaitReadyCommand(),
