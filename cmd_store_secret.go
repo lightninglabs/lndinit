@@ -68,7 +68,7 @@ func (x *storeSecretCommand) Execute(args []string) error {
 
 	case x.Batch:
 		for _, file := range args {
-			log("Reading secret from file %s", file)
+			logger.Infof("Reading secret from file %s", file)
 			content, err := readFile(file)
 			if err != nil {
 				return fmt.Errorf("cannot read file %s: %v",
@@ -82,7 +82,7 @@ func (x *storeSecretCommand) Execute(args []string) error {
 		}
 
 	default:
-		log("Reading secret from stdin")
+		logger.Info("Reading secret from stdin")
 		secret, err := bufio.NewReader(os.Stdin).ReadString('\n')
 		if err != nil && err != io.EOF {
 			return fmt.Errorf("error reading secret from stdin: %v",
@@ -126,7 +126,7 @@ func storeSecretsK8s(entries []*entry, opts *targetK8sSecret,
 			ObjectType: ObjectTypeSecret,
 		}
 
-		log("Storing key with name %s to secret %s in namespace %s",
+		logger.Infof("Storing key with name %s to secret %s in namespace %s",
 			entryOpts.KeyName, entryOpts.Name,
 			entryOpts.Namespace)
 		err := saveK8s(entry.value, entryOpts, overwrite, opts.Helm)

@@ -59,7 +59,7 @@ func (x *storeConfigmapCommand) Execute(args []string) error {
 
 	case x.Batch:
 		for _, file := range args {
-			log("Reading value/entry from file %s", file)
+			logger.Infof("Reading value/entry from file %s", file)
 			content, err := readFile(file)
 			if err != nil {
 				return fmt.Errorf("cannot read file %s: %v",
@@ -73,7 +73,7 @@ func (x *storeConfigmapCommand) Execute(args []string) error {
 		}
 
 	default:
-		log("Reading value/entry from stdin")
+		logger.Info("Reading value/entry from stdin")
 		value, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			return fmt.Errorf("error reading entry from stdin: %v", err)
@@ -115,7 +115,7 @@ func storeConfigmapsK8s(entries []*entry, opts *targetK8sConfigmap,
 			ObjectType: ObjectTypeConfigMap,
 		}
 
-		log("Storing key with name %s to configmap %s in namespace %s",
+		logger.Infof("Storing key with name %s to configmap %s in namespace %s",
 			entryOpts.KeyName, entryOpts.Name,
 			entryOpts.Namespace)
 
