@@ -22,7 +22,11 @@ XARGS := xargs -L 1
 
 VERSION_TAG = $(shell git describe --tags)
 
+DEV_TAGS = kvdb_etcd kvdb_postgres kvdb_sqlite
+RELEASE_TAGS = $(DEV_TAGS)
+
 BUILD_SYSTEM = darwin-amd64 \
+darwin-arm64 \
 linux-386 \
 linux-amd64 \
 linux-armv6 \
@@ -49,7 +53,7 @@ endif
 make_ldflags = $(2) -X main.Commit=$(COMMIT)
 
 DEV_GCFLAGS := -gcflags "all=-N -l"
-LDFLAGS := -ldflags "$(call make_ldflags, ${tags}, -s -w)"
+LDFLAGS := -ldflags "$(call make_ldflags, $(DEV_TAGS), -s -w)"
 DEV_LDFLAGS := -ldflags "$(call make_ldflags, $(DEV_TAGS))"
 
 # For the release, we want to remove the symbol table and debug information (-s)
@@ -83,7 +87,7 @@ build:
 
 install:
 	@$(call print, "Installing lndinit.")
-	$(GOINSTALL) -tags="${tags}" $(LDFLAGS) $(PKG)
+	$(GOINSTALL) -tags="$(DEV_TAGS)" $(LDFLAGS) $(PKG)
 
 release-install:
 	@$(call print, "Installing release lndinit.")
@@ -105,7 +109,7 @@ scratch: build
 
 unit: 
 	@$(call print, "Running unit tests.")
-	$(GOTEST) ./...
+	$(GOTEST) -tags="$(DEV_TAGS)" ./...
 
 fmt: $(GOIMPORTS_BIN)
 	@$(call print, "Fixing imports.")
@@ -115,7 +119,7 @@ fmt: $(GOIMPORTS_BIN)
 
 lint: docker-tools
 	@$(call print, "Linting source.")
-	$(DOCKER_TOOLS) golangci-lint run -v $(LINT_WORKERS)
+	$(DOCKER_TOOLS) golangci-lint run -v --build-tags="$(DEV_TAGS)"$(LINT_WORKERS)
 
 vendor:
 	@$(call print, "Re-creating vendor directory.")

@@ -44,7 +44,8 @@ func main() {
 	// registered yet. We ignore any errors as that'll be handled later.
 	_, _ = flags.NewParser(globalOpts, flags.IgnoreUnknown).Parse()
 
-	logger.Info("Version %s commit=%s, debuglevel=debug", Version(), Commit)
+	logger.Infof("Version %s commit=%s, debuglevel=%s", Version(), Commit,
+		globalOpts.DebugLevel)
 
 	if globalOpts.DebugLevel != "" {
 		level, ok := btclog.LevelFromString(globalOpts.DebugLevel)
@@ -122,6 +123,7 @@ func registerCommands(parser *flags.Parser) error {
 		newStoreSecretCommand(),
 		newStoreConfigmapCommand(),
 		newWaitReadyCommand(),
+		newMigrateDBCommand(),
 	}
 
 	for _, command := range commands {
