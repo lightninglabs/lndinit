@@ -100,7 +100,7 @@ func createTestDatabase(dbPath string) (walletdb.DB, error) {
 	// Create test data structure.
 	err = db.Update(func(tx walletdb.ReadWriteTx) error {
 		fmt.Println("Creating test data structure...")
-		// Create root bucket "accounts"
+		// Create root bucket "accounts".
 		accounts, err := tx.CreateTopLevelBucket([]byte("accounts"))
 		if err != nil {
 			fmt.Print("bucket creation failed.")
@@ -149,14 +149,16 @@ func createTestDatabase(dbPath string) (walletdb.DB, error) {
 }
 
 // verifyDatabases verifies the migration by comparing the values in the
-// source and target databases.
+// source and target databases. This checks every value to make sure we do not
+// have an error in our resume logic. So it walks the entire database without
+// any chunking, so we have a redundant check.
 func verifyDatabases(t *testing.T, sourceDB, targetDB walletdb.DB) error {
 	return sourceDB.View(func(sourceTx walletdb.ReadTx) error {
 		return targetDB.View(func(targetTx walletdb.ReadTx) error {
 			// Helper function to compare buckets recursively.
 			var compareBuckets func(source, target walletdb.ReadBucket) error
 			compareBuckets = func(source, target walletdb.ReadBucket) error {
-				// Compare all key-value pairs
+				// Compare all key-value pairs.
 				return source.ForEach(func(k, v []byte) error {
 					if v == nil {
 						// This is a nested bucket.
