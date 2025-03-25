@@ -46,7 +46,7 @@ endif
 # We only return the part inside the double quote here to avoid escape issues
 # when calling the external release script. The second parameter can be used to
 # add additional ldflags if needed (currently only used for the release).
-make_ldflags = $(2) -X $(PKG).Commit=$(COMMIT)
+make_ldflags = $(2) -X main.Commit=$(COMMIT)
 
 DEV_GCFLAGS := -gcflags "all=-N -l"
 LDFLAGS := -ldflags "$(call make_ldflags, ${tags}, -s -w)"
