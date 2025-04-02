@@ -174,37 +174,37 @@ func readSecretK8s(client *kubernetes.Clientset,
 }
 
 func getClientK8s() (*kubernetes.Clientset, error) {
-	log("Creating k8s cluster config")
+	logger.Info("Creating k8s cluster config")
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to grab cluster config: %v", err)
 	}
 
-	log("Creating k8s cluster client")
+	logger.Info("Creating k8s cluster client")
 	client, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("error creating cluster config: %v", err)
 	}
 
-	log("Cluster client created successfully")
+	logger.Info("Cluster client created successfully")
 	return client, nil
 }
 
 func getSecretK8s(client *kubernetes.Clientset, namespace,
 	name string) (*api.Secret, bool, error) {
 
-	log("Attempting to load secret %s from namespace %s", name, namespace)
+	logger.Infof("Attempting to load secret %s from namespace %s", name, namespace)
 	secret, err := client.CoreV1().Secrets(namespace).Get(
 		context.Background(), name, metav1.GetOptions{},
 	)
 
 	switch {
 	case err == nil:
-		log("Secret %s loaded successfully", name)
+		logger.Infof("Secret %s loaded successfully", name)
 		return secret, true, nil
 
 	case errors.IsNotFound(err):
-		log("Secret %s not found in namespace %s", name, namespace)
+		logger.Infof("Secret %s not found in namespace %s", name, namespace)
 		return nil, false, nil
 
 	default:
@@ -217,7 +217,7 @@ func updateSecretValueK8s(client *kubernetes.Clientset, secret *api.Secret,
 	opts *k8sObjectOptions, overwrite bool, content string) error {
 
 	if len(secret.Data) == 0 {
-		log("Data of secret %s is empty, initializing", opts.Name)
+		logger.Infof("Data of secret %s is empty, initializing", opts.Name)
 		secret.Data = make(map[string][]byte)
 	}
 
@@ -233,7 +233,7 @@ func updateSecretValueK8s(client *kubernetes.Clientset, secret *api.Secret,
 	}
 	secret.Data[opts.KeyName] = []byte(content)
 
-	log("Attempting to update key %s of secret %s in namespace %s",
+	logger.Infof("Attempting to update key %s of secret %s in namespace %s",
 		opts.KeyName, opts.Name, opts.Namespace)
 	updatedSecret, err := client.CoreV1().Secrets(opts.Namespace).Update(
 		context.Background(), secret, metav1.UpdateOptions{},
@@ -247,7 +247,7 @@ func updateSecretValueK8s(client *kubernetes.Clientset, secret *api.Secret,
 		TypeMeta:   updatedSecret.TypeMeta,
 		ObjectMeta: updatedSecret.ObjectMeta,
 	})
-	log("Updated secret: %s", jsonSecret)
+	logger.Infof("Updated secret: %s", jsonSecret)
 
 	return nil
 }
@@ -295,7 +295,7 @@ func createSecretK8s(client *kubernetes.Clientset, opts *k8sObjectOptions,
 		TypeMeta:   updatedSecret.TypeMeta,
 		ObjectMeta: updatedSecret.ObjectMeta,
 	})
-	log("Created secret: %s", jsonSecret)
+	logger.Infof("Created secret: %s", jsonSecret)
 
 	return nil
 }
@@ -320,18 +320,18 @@ func secretToString(rawSecret []byte, doubleBase64 bool) (string, error) {
 func getConfigMapK8s(client *kubernetes.Clientset,
 	namespace, name string) (*api.ConfigMap, bool, error) {
 
-	log("Attempting to load configmap %s from namespace %s", name, namespace)
+	logger.Infof("Attempting to load configmap %s from namespace %s", name, namespace)
 	configMap, err := client.CoreV1().ConfigMaps(namespace).Get(
 		context.Background(), name, metav1.GetOptions{},
 	)
 
 	switch {
 	case err == nil:
-		log("ConfigMap %s loaded successfully", name)
+		logger.Infof("ConfigMap %s loaded successfully", name)
 		return configMap, true, nil
 
 	case errors.IsNotFound(err):
-		log("ConfigMap %s not found in namespace %s", name, namespace)
+		logger.Infof("ConfigMap %s not found in namespace %s", name, namespace)
 		return nil, false, nil
 
 	default:
@@ -345,7 +345,7 @@ func updateConfigMapValueK8s(client *kubernetes.Clientset,
 	overwrite bool, content string) error {
 
 	if configMap.Data == nil {
-		log("Data of configmap %s is empty, initializing", opts.Name)
+		logger.Infof("Data of configmap %s is empty, initializing", opts.Name)
 		configMap.Data = make(map[string]string)
 	}
 
@@ -354,7 +354,7 @@ func updateConfigMapValueK8s(client *kubernetes.Clientset,
 			opts.KeyName, opts.Name)
 	}
 
-	log("Attempting to update key %s of configmap %s in namespace %s",
+	logger.Infof("Attempting to update key %s of configmap %s in namespace %s",
 		opts.KeyName, opts.Name, opts.Namespace)
 
 	configMap.Data[opts.KeyName] = content
@@ -370,7 +370,7 @@ func updateConfigMapValueK8s(client *kubernetes.Clientset,
 		TypeMeta:   updatedConfigMap.TypeMeta,
 		ObjectMeta: updatedConfigMap.ObjectMeta,
 	})
-	log("Updated configmap: %s", jsonConfigMap)
+	logger.Infof("Updated configmap: %s", jsonConfigMap)
 
 	return nil
 }
@@ -412,7 +412,7 @@ func createConfigMapK8s(client *kubernetes.Clientset,
 		TypeMeta:   updatedConfigMap.TypeMeta,
 		ObjectMeta: updatedConfigMap.ObjectMeta,
 	})
-	log("Created configmap: %s", jsonConfigMap)
+	logger.Infof("Created configmap: %s", jsonConfigMap)
 
 	return nil
 }

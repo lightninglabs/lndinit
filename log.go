@@ -1,19 +1,20 @@
 package main
 
 import (
-	"fmt"
 	"os"
-	"time"
+
+	"github.com/btcsuite/btclog/v2"
 )
 
-type logger func(format string, args ...interface{})
+var (
+	// backend is the logging backend used to create all loggers.
+	backend = btclog.NewDefaultHandler(os.Stderr)
 
-func stderrLogger(format string, args ...interface{}) {
-	formattedMsg := fmt.Sprintf(format, args...)
-	now := time.Now().Format("2006-01-02 15:04:05.000")
-	_, _ = fmt.Fprintf(
-		os.Stderr, "%s LNDINIT: %s\n", now, formattedMsg,
-	)
+	// logger is logger for the main package of the lndinit tool.
+	logger = btclog.NewSLogger(backend).WithPrefix("LNDINIT")
+)
+
+// NewSubLogger creates a new sub logger with the given prefix.
+func NewSubLogger(prefix string) btclog.Logger {
+	return logger.SubSystem(prefix)
 }
-
-func noopLogger(_ string, _ ...interface{}) {}
