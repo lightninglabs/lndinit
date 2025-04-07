@@ -105,7 +105,7 @@ func createTestDatabase(dbPath string) (kvdb.Backend, error) {
 	// Create test data structure.
 	err = db.Update(func(tx kvdb.RwTx) error {
 		fmt.Println("Creating test data structure...")
-		// Create root bucket "accounts"
+		// Create root bucket "accounts".
 		accounts, err := tx.CreateTopLevelBucket([]byte("accounts"))
 		if err != nil {
 			fmt.Print("bucket creation failed.")
