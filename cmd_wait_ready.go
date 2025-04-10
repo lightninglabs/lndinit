@@ -58,7 +58,7 @@ func (x *waitReadyCommand) Execute(_ []string) error {
 	timeout := time.Duration(math.MaxInt64)
 	if x.Timeout > 0 {
 		timeout = x.Timeout
-		log("Will time out in %v (%s)", timeout, started.Add(timeout))
+		logger.Infof("Will time out in %v (%s)", timeout, started.Add(timeout))
 	}
 
 	return waitUntilStatus(
@@ -70,17 +70,17 @@ func (x *waitReadyCommand) Execute(_ []string) error {
 func waitUntilStatus(rpcServer string, desiredState lnrpc.WalletState,
 	timeout time.Duration, shutdown <-chan struct{}) error {
 
-	log("Waiting for lnd to become ready (want state %v)", desiredState)
+	logger.Infof("Waiting for lnd to become ready (want state %v)", desiredState)
 
 	connectionRetryTicker := time.NewTicker(connectionRetryInterval)
 	timeoutChan := time.After(timeout)
 
 connectionLoop:
 	for {
-		log("Attempting to connect to RPC server %s", rpcServer)
+		logger.Infof("Attempting to connect to RPC server %s", rpcServer)
 		conn, err := getStatusConnection(rpcServer)
 		if err != nil {
-			log("Connection to lnd not successful: %v", err)
+			logger.Errorf("Connection to lnd not successful: %v", err)
 
 			select {
 			case <-connectionRetryTicker.C:
@@ -93,12 +93,12 @@ connectionLoop:
 			continue
 		}
 
-		log("Attempting to subscribe to the wallet state")
+		logger.Info("Attempting to subscribe to the wallet state")
 		statusStream, err := conn.SubscribeState(
 			context.Background(), &lnrpc.SubscribeStateRequest{},
 		)
 		if err != nil {
-			log("Status subscription for lnd not successful: %v",
+			logger.Errorf("Status subscription for lnd not successful: %v",
 				err)
 
 			select {
@@ -124,7 +124,7 @@ connectionLoop:
 
 			msg, err := statusStream.Recv()
 			if err != nil {
-				log("Error receiving status update: %v", err)
+				logger.Errorf("Error receiving status update: %v", err)
 
 				select {
 				case <-connectionRetryTicker.C:
@@ -140,7 +140,7 @@ connectionLoop:
 				continue connectionLoop
 			}
 
-			log("Received update from lnd, wallet status is now: "+
+			logger.Infof("Received update from lnd, wallet status is now: "+
 				"%v", msg.State)
 
 			// We've arrived at the final state!
