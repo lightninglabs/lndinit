@@ -95,7 +95,7 @@ release-install:
 
 release:
 	@$(call print, "Creating release of lndinit.")
-	./release.sh build-release "$(VERSION_TAG)" "$(BUILD_SYSTEM)" "$(RELEASE_LDFLAGS)"
+	./release.sh build-release "$(VERSION_TAG)" "$(BUILD_SYSTEM)" "$(RELEASE_LDFLAGS)" "$(RELEASE_TAGS)"
 
 docker-tools:
 	@$(call print, "Building tools docker image.")
