@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/btcsuite/btcd/btcutil"
@@ -17,6 +16,7 @@ import (
 	"github.com/jessevdk/go-flags"
 	"github.com/lightninglabs/lndinit/migratekvdb"
 	"github.com/lightningnetwork/lnd/channeldb"
+	"github.com/lightningnetwork/lnd/healthcheck"
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/kvdb/postgres"
 	"github.com/lightningnetwork/lnd/kvdb/sqlbase"
@@ -590,7 +590,7 @@ func openSourceDb(cfg *SourceDB, prefix, network string,
 	// Because the destination can also just be a postgres dsn, we just
 	// check if the source dir has enough free space to hold a copy of the
 	// db.
-	freeSpace, err := availableDiskSpace(cfg.Bolt.DataDir)
+	freeSpace, err := healthcheck.AvailableDiskSpace(cfg.Bolt.DataDir)
 	if err != nil {
 		return nil, fmt.Errorf("error determining source directory "+
 			"free space: %v", err)
@@ -920,20 +920,6 @@ func createMigrationCompletedFile(sourceDB *SourceDB, prefix,
 	logger.Infof("Created migration completed file at %s", markerPath)
 
 	return nil
-}
-
-// availableDiskSpace returns the available disk space in bytes of the given
-// file system.
-func availableDiskSpace(path string) (uint64, error) {
-	s := syscall.Statfs_t{}
-	err := syscall.Statfs(path, &s)
-	if err != nil {
-		return 0, err
-	}
-
-	// Some OSes have s.Bavail defined as int64, others as uint64, so we
-	// need the explicit type conversion here.
-	return uint64(s.Bavail) * uint64(s.Bsize), nil // nolint:unconvert
 }
 
 // checkPathExists verifies that the directory exists.
