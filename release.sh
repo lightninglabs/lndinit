@@ -28,6 +28,7 @@ function build_release() {
   local tag=$1
   local sys=$2
   local ldflags=$3
+  local tags=$4
 
   green " - Packaging vendor"
   go mod vendor
@@ -64,7 +65,7 @@ function build_release() {
     pushd "${dir}"
 
     green " - Building: ${os} ${arch} ${arm}"
-    env CGO_ENABLED=0 GOOS=$os GOARCH=$arch GOARM=$arm go build -v -trimpath -ldflags="${ldflags}" ${PKG}
+    env CGO_ENABLED=0 GOOS=$os GOARCH=$arch GOARM=$arm go build -v -trimpath -ldflags="${ldflags}" -tags="${tags}" ${PKG}
     popd
 
     if [[ $os == "windows" ]]; then
