@@ -8,11 +8,6 @@ FROM golang:${GO_VERSION}-alpine as builder
 # queries required to connect to linked containers succeed.
 ENV GODEBUG netdns=cgo
 
-# Pass a tag, branch or a commit using build-arg. This allows a docker image to
-# be built from a specified Git state. The default image will use the Git tip of
-# master by default.
-ARG git_url="https://github.com/lightninglabs/lndinit"
-
 # Copy in the local repository to build from.
 COPY . /go/src/github.com/lightninglabs/lndinit
 
