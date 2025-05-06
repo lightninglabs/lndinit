@@ -34,6 +34,7 @@ const (
 type globalOptions struct {
 	ErrorOnExisting bool   `long:"error-on-existing" short:"e" description:"Exit with code EXIT_CODE_TARGET_EXISTS (128) instead of 0 if the result of an action is already present"`
 	DebugLevel      string `long:"debuglevel" short:"d" description:"Set the log level (Off, Critical, Error, Warn, Info, Debug, Trace)"`
+	Verbose         bool   `long:"verbose" short:"v" description:"Turn on logging to stderr"`
 }
 
 func main() {
@@ -43,6 +44,9 @@ func main() {
 	// just the global options, we do a pre-parsing without any commands
 	// registered yet. We ignore any errors as that'll be handled later.
 	_, _ = flags.NewParser(globalOpts, flags.IgnoreUnknown).Parse()
+	if globalOpts.Verbose {
+		globalOpts.DebugLevel = "error"
+	}
 
 	logger.Infof("Version %s commit=%s, debuglevel=%s", Version(), Commit,
 		globalOpts.DebugLevel)
