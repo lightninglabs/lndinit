@@ -69,7 +69,12 @@ e.g. 200MB
    This version introduced an optimized revocation log storage system that
    reduces the storage footprint. All channels will be automatically migrated
    to this new format when the setting is enabled.
-6. Start `lnd` normally, using the flags mentioned above but not yet changing
+6. If you have ever run the watchtower client you need to make sure before
+   starting the migration that you either activate it again and restart LND so
+   that the db is up to date (the newest migrations have been applied) or you
+   delete the `wtclient.db` manually so that the migration can proceed
+   successfully because you do not plan to use the wtclient anymore.
+7. Start `lnd` normally, using the flags mentioned above but not yet changing
    any database backend related configuration options. Check the log that the
    database schema was migrated successfully, for example: `Checking for
    schema update: latest_version=XX, db_version=XX`. This relates to the 
@@ -79,7 +84,7 @@ e.g. 200MB
    that all LND nodes which want to migrate to the SQL world have the latest db
    modifications in place before migrating to a different DB type. If that is
    not the case the migration will be refused. 
-7. Stop `lnd` again and make sure it isn't started again by accident during the
+8. Stop `lnd` again and make sure it isn't started again by accident during the
    data migration (e.g. disable any `systemd` or other scripts that start/stop
    `lnd`).
 
