@@ -177,6 +177,14 @@ var (
 		lncfg.NSWalletDB,
 		lncfg.NSNeutrinoDB,
 	}
+
+	// databasesWithMigrations are the databases that have new versions
+	// introduced during their lifetime and therefore need to be up to
+	// date before we can start the migration to SQL backends.
+	databasesWithMigrations = []string{
+		lncfg.NSChannelDB,
+		lncfg.NSTowerClientDB,
+	}
 )
 
 func (x *migrateDBCommand) Execute(_ []string) error {
@@ -204,6 +212,60 @@ func (x *migrateDBCommand) Execute(_ []string) error {
 	// get the context for the migration which is tied to the signal
 	// interceptor.
 	ctx := getContext()
+
+	// Before starting any migration, make sure that all existing dbs have
+	// the latest migrations applied so that we do only migrate when all
+	// dbs are up to date. For example it might happen that a user run a
+	// watchtower client earlier and has it switched off since new
+	// migrations have been introduced. In that case we do not start the
+	// migration but first let the user either delete the outdated db or
+	// migrate it by activating the watchtower client again.
+	for _, prefix := range databasesWithMigrations {
+		logger.Infof("Checking db version of database %s", prefix)
+
+		// Check if the database file exists before trying to open it.
+		dbPath := getBoltDBPath(x.Source, prefix, x.Network)
+		if dbPath == "" {
+			return fmt.Errorf("unknown prefix: %s", prefix)
+		}
+
+		// Open and check the database version.
+		srcDb, err := openSourceDb(x.Source, prefix, x.Network, true)
+		if err == kvdb.ErrDbDoesNotExist {
+			// Only skip if it's an optional because it's not
+			// required to run a wtclient or wtserver for example.
+			if optionalDBs[prefix] {
+				logger.Warnf("Skipping checking db version "+
+					"of optional DB %s: not found", prefix)
+
+				continue
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("failed to open source db with "+
+				"prefix `%s` for version check: %w", prefix,
+				err)
+		}
+
+		switch prefix {
+		case lncfg.NSChannelDB:
+			err := checkChannelDBMigrationsApplied(srcDb)
+			if err != nil {
+				srcDb.Close()
+				return err
+			}
+
+		case lncfg.NSTowerClientDB:
+			err := checkWTClientDBMigrationsApplied(srcDb)
+			if err != nil {
+				srcDb.Close()
+				return err
+			}
+		}
+
+		srcDb.Close()
+		logger.Infof("Version check passed for database %s", prefix)
+	}
 
 	for _, prefix := range allDBPrefixes {
 		logger.Infof("Attempting to migrate DB with prefix `%s`", prefix)
@@ -342,31 +404,6 @@ func (x *migrateDBCommand) Execute(_ []string) error {
 				"This is not allowed. Tag reads: source: `%s`, "+
 				"destination: `%s`",
 				prefix, sourceMarker, destMarker)
-		}
-
-		// Check that the source DB has had all its schema migrations
-		// applied before we migrate any of its data. Currently only
-		// migration of the channel.db and the watchtower.db exist.
-		// Check channel.db migrations.
-		if prefix == lncfg.NSChannelDB {
-			logger.Info("Checking DB version of source DB " +
-				"(channel.db)")
-
-			err := checkChannelDBMigrationsApplied(srcDb)
-			if err != nil {
-				return err
-			}
-		}
-
-		// Check watchtower client DB migrations.
-		if prefix == lncfg.NSTowerClientDB {
-			logger.Info("Checking DB version of source DB " +
-				"(wtclient.db)")
-
-			err := checkWTClientDBMigrationsApplied(srcDb)
-			if err != nil {
-				return err
-			}
 		}
 
 		// In case we want to start a new migration we delete the
@@ -826,7 +863,9 @@ func checkWTClientDBMigrationsApplied(db kvdb.Backend) error {
 		return fmt.Errorf("refusing to migrate source database with "+
 			"version %d while latest known DB version is %d; "+
 			"please upgrade the DB before using the data "+
-			"migration tool", version, wtdb.LatestDBMigrationVersion())
+			"migration tool or delete the wtclient.db manually "+
+			"in case you don't plan to use the watchtower client "+
+			"anymore", version, wtdb.LatestDBMigrationVersion())
 	}
 
 	return nil
