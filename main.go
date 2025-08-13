@@ -21,8 +21,9 @@ const (
 	outputFormatRaw  = "raw"
 	outputFormatJSON = "json"
 
-	storageFile = "file"
-	storageK8s  = "k8s"
+	storageFile  = "file"
+	storageK8s   = "k8s"
+	storageVault = "vault"
 
 	errTargetExists = "target exists error"
 	errInputMissing = "input missing error"
