@@ -1,6 +1,6 @@
 module github.com/lightninglabs/lndinit/tools
 
-go 1.23.6
+go 1.23.12
 
 require (
 	github.com/golangci/golangci-lint v1.64.8
