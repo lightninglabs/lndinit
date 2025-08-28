@@ -22,10 +22,11 @@ type entry struct {
 }
 
 type storeSecretCommand struct {
-	Batch     bool             `long:"batch" description:"Instead of reading one secret from stdin, read all files of the argument list and store them as entries in the secret"`
-	Overwrite bool             `long:"overwrite" description:"Overwrite existing secret entries instead of aborting"`
-	Target    string           `long:"target" short:"t" description:"Secret storage target" choice:"k8s"`
-	K8s       *targetK8sSecret `group:"Flags for storing the secret as a value inside a Kubernetes Secret (use when --target=k8s)" namespace:"k8s"`
+	Batch     bool                `long:"batch" description:"Instead of reading one secret from stdin, read all files of the argument list and store them as entries in the secret"`
+	Overwrite bool                `long:"overwrite" description:"Overwrite existing secret entries instead of aborting"`
+	Target    string              `long:"target" short:"t" description:"Secret storage target" choice:"k8s"`
+	K8s       *targetK8sSecret    `group:"Flags for storing the secret as a value inside a Kubernetes Secret (use when --target=k8s)" namespace:"k8s"`
+	Vault     *vaultSecretOptions `group:"Flags for storing the secret as a value inside a HashiCorp Vault (use when --target=vault)" namespace:"vault"`
 }
 
 func newStoreSecretCommand() *storeSecretCommand {
@@ -38,6 +39,9 @@ func newStoreSecretCommand() *storeSecretCommand {
 			Helm: &helmOptions{
 				ResourcePolicy: defaultK8sResourcePolicy,
 			},
+		},
+		Vault: &vaultSecretOptions{
+			AuthTokenPath: defaultK8sServiceAccountTokenPath,
 		},
 	}
 }
@@ -101,6 +105,15 @@ func (x *storeSecretCommand) Execute(args []string) error {
 
 		return storeSecretsK8s(entries, x.K8s, x.Overwrite)
 
+	case storageVault:
+		// Take the actual entry name from the options if we aren't in
+		// batch mode.
+		if len(entries) == 1 && entries[0].key == "" {
+			entries[0].key = x.Vault.SecretKeyName
+		}
+
+		return storeSecretsVault(entries, x.Vault, x.Overwrite)
+
 	default:
 		return fmt.Errorf("invalid secret storage target %s", x.Target)
 	}
@@ -132,6 +145,37 @@ func storeSecretsK8s(entries []*entry, opts *targetK8sSecret,
 		err := saveK8s(entry.value, entryOpts, overwrite, opts.Helm)
 		if err != nil {
 			return fmt.Errorf("error storing secret %s key %s: "+
+				"%v", opts.SecretName, entry.key, err)
+		}
+	}
+
+	return nil
+}
+
+func storeSecretsVault(entries []*entry, opts *vaultSecretOptions,
+	overwrite bool) error {
+
+	if opts.SecretName == "" {
+		return fmt.Errorf("secret name is required")
+	}
+
+	for _, entry := range entries {
+		if entry.key == "" {
+			return fmt.Errorf("secret entry key is required")
+		}
+
+		entryOpts := &vaultSecretOptions{
+			AuthTokenPath: opts.AuthTokenPath,
+			AuthRole:      opts.AuthRole,
+			SecretName:    opts.SecretName,
+			SecretKeyName: entry.key,
+		}
+
+		logger.Infof("Storing entry with name %s to secret %s in vault",
+			entryOpts.SecretKeyName, entryOpts.SecretName)
+		err := saveVault(entry.value, entryOpts, overwrite)
+		if err != nil {
+			return fmt.Errorf("error storing secret %s entry %s: "+
 				"%v", opts.SecretName, entry.key, err)
 		}
 	}
