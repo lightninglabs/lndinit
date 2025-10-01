@@ -4,6 +4,10 @@ ARG BASE_IMAGE_VERSION=v0.19.3-beta
 
 FROM golang:${GO_VERSION}-alpine as builder
 
+# Allow defining the CGO_ENABLED variable so we can build binaries
+# that will work in a different type of container.
+ARG CGO_ENABLED=1
+
 # Force Go to use the cgo based DNS resolver. This is required to ensure DNS
 # queries required to connect to linked containers succeed.
 ENV GODEBUG netdns=cgo
