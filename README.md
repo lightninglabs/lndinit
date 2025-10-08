@@ -59,7 +59,7 @@ No `lnd` needed, but seed will be in `lnd`-specific [`aezeed` format](https://gi
   - Only works if `lnd` is NOT running yet
 - `--init-type=rpc` calls the `lnd` RPC to create a wallet
   - Use this mode if you are using a remote database as `lnd`'s storage backend instead of bolt DB based file databases
-  - Needs `lnd` to be running and no wallet to exist
+  - Waits for `lnd` to be running. Once running, if no wallet exists, one will be created, otherwise if a wallet already exists then exit code 1 will be returned
 
 ### wait-ready
 `wait-ready` waits for `lnd` to be ready by connecting to `lnd`'s status RPC
