@@ -1,6 +1,6 @@
-ARG GO_VERSION=1.23.12
+ARG GO_VERSION=1.24.6
 ARG BASE_IMAGE=lightninglabs/lnd
-ARG BASE_IMAGE_VERSION=v0.19.3-beta
+ARG BASE_IMAGE_VERSION=v0.20.0-beta.rc1
 
 FROM golang:${GO_VERSION}-alpine as builder
 
