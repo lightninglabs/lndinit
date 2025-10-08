@@ -15,8 +15,9 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-var (
-	connectionRetryInterval = time.Millisecond * 250
+const (
+	baseRetry = time.Millisecond * 250
+	maxRetry  = 10 * time.Second
 )
 
 type waitReadyCommand struct {
@@ -72,8 +73,8 @@ func waitUntilStatus(rpcServer string, desiredState lnrpc.WalletState,
 
 	logger.Infof("Waiting for lnd to become ready (want state %v)", desiredState)
 
-	connectionRetryTicker := time.NewTicker(connectionRetryInterval)
 	timeoutChan := time.After(timeout)
+	retryDelay := baseRetry
 
 connectionLoop:
 	for {
@@ -83,13 +84,14 @@ connectionLoop:
 			logger.Errorf("Connection to lnd not successful: %v", err)
 
 			select {
-			case <-connectionRetryTicker.C:
+			case <-time.After(retryDelay):
 			case <-timeoutChan:
 				return fmt.Errorf("timeout reached")
 			case <-shutdown:
 				return nil
 			}
 
+			retryDelay = nextBackoff(retryDelay)
 			continue
 		}
 
@@ -102,13 +104,14 @@ connectionLoop:
 				err)
 
 			select {
-			case <-connectionRetryTicker.C:
+			case <-time.After(retryDelay):
 			case <-timeoutChan:
 				return fmt.Errorf("timeout reached")
 			case <-shutdown:
 				return nil
 			}
 
+			retryDelay = nextBackoff(retryDelay)
 			continue
 		}
 
@@ -127,18 +130,22 @@ connectionLoop:
 				logger.Errorf("Error receiving status update: %v", err)
 
 				select {
-				case <-connectionRetryTicker.C:
+				case <-time.After(retryDelay):
 				case <-timeoutChan:
 					return fmt.Errorf("timeout reached")
 				case <-shutdown:
 					return nil
 				}
 
+				retryDelay = nextBackoff(retryDelay)
 				// Something went wrong, perhaps lnd shut down
 				// before becoming active. Let's retry the whole
 				// connection again.
 				continue connectionLoop
 			}
+
+			// We have a live stream now, so reset the backoff.
+			retryDelay = baseRetry
 
 			logger.Infof("Received update from lnd, wallet status is now: "+
 				"%v", msg.State)
@@ -187,4 +194,15 @@ func getStatusConnection(rpcServer string) (lnrpc.StateClient, error) {
 	}
 
 	return lnrpc.NewStateClient(conn), nil
+}
+
+// nextBackoff calculates the next duration to wait before attempting another
+// connection.
+func nextBackoff(d time.Duration) time.Duration {
+	d *= 2
+	if d > maxRetry {
+		d = maxRetry
+	}
+
+	return d
 }
