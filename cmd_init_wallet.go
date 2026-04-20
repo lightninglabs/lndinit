@@ -492,7 +492,7 @@ func getUnlockerConnection(rpcServer,
 		grpc.WithContextDialer(genericDialer),
 	}
 
-	conn, err := grpc.Dial(rpcServer, opts...)
+	conn, err := grpc.NewClient(rpcServer, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to connect to RPC server: %v",
 			err)
