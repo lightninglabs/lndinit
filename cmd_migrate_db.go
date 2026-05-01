@@ -193,6 +193,15 @@ func (x *migrateDBCommand) Execute(_ []string) error {
 		return fmt.Errorf("invalid database configuration: %w", err)
 	}
 
+	// Print a loud warning before doing any work. A successful migration
+	// ends by writing a tombstone marker into every source bbolt file,
+	// after which lnd refuses to open them. If the lnd binary that will
+	// run against the destination DB was not compiled with the matching
+	// build tag (e.g. kvdb_sqlite, kvdb_postgres), the only way back to a
+	// working node is restoring the bbolt files from a backup taken
+	// BEFORE this command runs.
+	logTombstoneWarning(x.Dest.Backend)
+
 	// We keep track of the DBs that we have migrated.
 	migratedDBs := []string{}
 
@@ -523,6 +532,11 @@ func (x *migrateDBCommand) Execute(_ []string) error {
 		if err != nil {
 			return err
 		}
+
+		logger.Warnf("Writing IRREVERSIBLE tombstone marker on "+
+			"source DB with prefix `%s`. After this point lnd "+
+			"will refuse to open this bbolt file; only a "+
+			"pre-migration backup can restore it.", prefix)
 
 		if err := addMarker(srcDb, channeldb.TombstoneKey); err != nil {
 			return err
@@ -997,4 +1011,38 @@ func getContext() context.Context {
 		cancel()
 	}()
 	return ctxc
+}
+
+// logTombstoneWarning prints a multi-line WARN banner explaining that the
+// migration will write irreversible tombstone markers into every source bbolt
+// file. It is printed before any work happens so operators reviewing logs (or
+// piping `lndinit migrate-db` output through tooling) cannot miss it.
+func logTombstoneWarning(destBackend string) {
+	banner := []string{
+		"################################################################",
+		"#                                                              #",
+		"#   WARNING: lndinit migrate-db will write IRREVERSIBLE        #",
+		"#   tombstone markers into every source bbolt database file    #",
+		"#   after a successful migration. Once tombstoned, lnd will    #",
+		"#   refuse to open the bbolt files with the error:             #",
+		"#                                                              #",
+		"#     refusing to use db, it was marked with a tombstone       #",
+		"#     after successful data migration                          #",
+		"#                                                              #",
+		"#   Before continuing, please confirm BOTH of the following:   #",
+		"#                                                              #",
+		"#     1. You have a backup of every bbolt source DB file       #",
+		"#        (channel.db, wallet.db, macaroons.db, etc.).          #",
+		"#     2. The lnd binary that will run against the destination  #",
+		fmt.Sprintf("#        backend was compiled with the %-23s#", destBackend+" build tag."),
+		"#                                                              #",
+		"#   Without (2), lnd will fail on startup with `unknown        #",
+		"#   database type` and the only recovery path is restoring     #",
+		"#   the bbolt files from the backup taken in (1).              #",
+		"#                                                              #",
+		"################################################################",
+	}
+	for _, line := range banner {
+		logger.Warn(line)
+	}
 }
