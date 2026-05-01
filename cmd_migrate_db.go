@@ -99,6 +99,7 @@ type migrateDBCommand struct {
 	ForceNewMigration bool      `long:"force-new-migration" description:"Force a new migration from the beginning of the source DB so the resume state will be discarded"`
 	ForceVerifyDB     bool      `long:"force-verify-db" description:"Force a verification verifies two already marked (tombstoned and already migrated) dbs to make sure that the source db equals the content of the destination db"`
 	ChunkSize         uint64    `long:"chunk-size" description:"Chunk size for the migration in bytes"`
+	ErrorIfNoBboltDB  bool      `long:"error-if-no-bbolt-db-exists" description:"Return an error when a mandatory source bbolt DB is not found. By default missing source DBs are logged and skipped so a fresh node (no bbolt DBs yet) is treated as a successful no-op."`
 }
 
 func newMigrateDBCommand() *migrateDBCommand {
@@ -232,11 +233,24 @@ func (x *migrateDBCommand) Execute(_ []string) error {
 		// Open and check the database version.
 		srcDb, err := openSourceDb(x.Source, prefix, x.Network, true)
 		if err == kvdb.ErrDbDoesNotExist {
-			// Only skip if it's an optional because it's not
-			// required to run a wtclient or wtserver for example.
-			if optionalDBs[prefix] {
+			switch {
+			// Optional DBs (e.g. wtclient, wtserver, neutrino) are
+			// always safe to skip when missing.
+			case optionalDBs[prefix]:
 				logger.Warnf("Skipping checking db version "+
 					"of optional DB %s: not found", prefix)
+
+				continue
+
+			// A mandatory bbolt DB is missing. Treat this as a
+			// fresh node by default (LND will create the SQL DB
+			// itself on first start). Only fail if the user
+			// explicitly opted in via --error-if-no-bbolt-db-exists.
+			case !x.ErrorIfNoBboltDB:
+				logger.Warnf("Skipping checking db version "+
+					"of mandatory DB %s: not found "+
+					"(pass --error-if-no-bbolt-db-exists "+
+					"to fail instead)", prefix)
 
 				continue
 			}
@@ -281,11 +295,22 @@ func (x *migrateDBCommand) Execute(_ []string) error {
 			x.Source, prefix, x.Network, true,
 		)
 		if err == kvdb.ErrDbDoesNotExist {
-			// Only skip if it's an optional because it's not
-			// required to run a wtclient or wtserver for example.
-			if optionalDBs[prefix] {
+			switch {
+			// Optional DBs (e.g. wtclient, wtserver, neutrino) are
+			// always safe to skip when missing.
+			case optionalDBs[prefix]:
 				logger.Warnf("Skipping optional DB %s: not "+
 					"found", prefix)
+				continue
+
+			// A mandatory bbolt DB is missing. Treat this as a
+			// fresh node by default (LND will create the SQL DB
+			// itself on first start). Only fail if the user
+			// explicitly opted in via --error-if-no-bbolt-db-exists.
+			case !x.ErrorIfNoBboltDB:
+				logger.Warnf("Skipping mandatory DB %s: not "+
+					"found (pass --error-if-no-bbolt-db-"+
+					"exists to fail instead)", prefix)
 				continue
 			}
 		}

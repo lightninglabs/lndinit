@@ -238,6 +238,8 @@ Help Options:
           --force-verify-db                           Force a verification verifies two already marked (tombstoned and already migrated) dbs to make sure that the source db equals the
                                                       content of the destination db
           --chunk-size=                               Chunk size for the migration in bytes
+          --error-if-no-bbolt-db-exists               Return an error when a mandatory source bbolt DB is not found. By default missing source DBs are logged and skipped so a fresh node (no bbolt
+                                                      DBs yet) is treated as a successful no-op.
 
     source:
           --source.backend=[bolt]                     The source database backend. (default: bolt)
