@@ -440,20 +440,24 @@ Then proceed to the container image release process.
 
 ### Container image release
 
-When a new version of `lnd` is released, a new `lndinit` container image build
-is triggered by pushing a tag with the format:
-`docker/<lndinit_version>-lnd-<lnd_version>`
+When a new version of `lnd` or `litd` is released, a new `lndinit` container
+image build is triggered by pushing a tag with the format
+`docker/<lndinit_version>-lnd-<lnd_version>` (built on top of `lnd`) or
+`docker/<lndinit_version>-litd-<litd_version>` (built on top of `litd`).
 
-For example, to build an image based on lnd `v0.16.4-beta`, which includes
-lndinit `v0.1.15-beta`:
+For example, to build images based on lnd `v0.16.4-beta` and litd
+`v0.10.0-alpha`, which include lndinit `v0.1.15-beta`:
 
 ```
 LNDINIT_VERSION=v0.1.15-beta
 LND_VERSION=v0.16.4-beta
+LITD_VERSION=v0.10.0-alpha
 
 git checkout $LNDINIT_VERSION
 git tag docker/${LNDINIT_VERSION}-lnd-${LND_VERSION}
 git push docker/${LNDINIT_VERSION}-lnd-${LND_VERSION}
+git tag docker/${LNDINIT_VERSION}-litd-${LITD_VERSION}
+git push docker/${LNDINIT_VERSION}-litd-${LITD_VERSION}
 ```
 
 If lnd `v0.16.5-beta` is released and does not require additional `lndinit`

@@ -36,19 +36,27 @@ jobs:
         run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/docker/}" >> $GITHUB_ENV
 
       # We will push tags with the format docker/v0.x.y-beta-lnd-v0.aa.bb-beta
-      # where x and y are lndinit's version and aa and bb are lnd's version.
-      # This variable LND_VERSION extracts everything after v0.x.y-lnd- so we
-      # know which base image we need to build on top of.
-      - name: Set env for LND_VERSION
-        run: echo "LND_VERSION=${RELEASE_VERSION##v*\.*\.*-beta-lnd-}" >> $GITHUB_ENV
-      
-      - name: Set env for LNDINIT_VERSION
-        run: echo "LNDINIT_VERSION=${RELEASE_VERSION%%-lnd-v*\.*\.*-beta*}" >> $GITHUB_ENV
+      # to build on top of lnd, or docker/v0.x.y-beta-litd-v0.aa.bb-alpha to
+      # build on top of litd. Everything after the -lnd-/-litd- separator is the
+      # base image version we build on top of; everything before it is lndinit's
+      # version. The separator also selects the base image.
+      - name: Set env for BASE_IMAGE, BASE_IMAGE_VERSION and LNDINIT_VERSION
+        run: |
+          if [[ "${RELEASE_VERSION}" == *-litd-* ]]; then
+            echo "BASE_IMAGE=lightninglabs/lightning-terminal" >> $GITHUB_ENV
+            echo "BASE_IMAGE_VERSION=${RELEASE_VERSION#*-litd-}" >> $GITHUB_ENV
+            echo "LNDINIT_VERSION=${RELEASE_VERSION%%-litd-*}" >> $GITHUB_ENV
+          else
+            echo "BASE_IMAGE=lightninglabs/lnd" >> $GITHUB_ENV
+            echo "BASE_IMAGE_VERSION=${RELEASE_VERSION##v*\.*\.*-beta-lnd-}" >> $GITHUB_ENV
+            echo "LNDINIT_VERSION=${RELEASE_VERSION%%-lnd-v*\.*\.*-beta*}" >> $GITHUB_ENV
+          fi
 
       - name: Set daily tag
         if: github.event.schedule == '0 1 * * *'
         run: |
-          echo "LND_VERSION=daily-testing-only" >> $GITHUB_ENV
+          echo "BASE_IMAGE=lightninglabs/lnd" >> $GITHUB_ENV
+          echo "BASE_IMAGE_VERSION=daily-testing-only" >> $GITHUB_ENV
           echo "LNDINIT_VERSION=main" >> $GITHUB_ENV
           echo "RELEASE_VERSION=daily-testing-$(date -u +%Y%m%d),${DOCKER_REPO}/${DOCKER_IMAGE}:daily-testing-only" >> $GITHUB_ENV
 
@@ -61,7 +69,8 @@ jobs:
           tags: "${{ env.DOCKER_REPO }}/${{ env.DOCKER_IMAGE }}:${{ env.RELEASE_VERSION }}"
           build-args: |
             checkout=${{ env.LNDINIT_VERSION }}
-            BASE_IMAGE_VERSION=${{ env.LND_VERSION }}
+            BASE_IMAGE=${{ env.BASE_IMAGE }}
+            BASE_IMAGE_VERSION=${{ env.BASE_IMAGE_VERSION }}
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
