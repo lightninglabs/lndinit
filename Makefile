@@ -34,7 +34,7 @@ linux-armv7 \
 linux-arm64 \
 windows-386 \
 windows-amd64 \
-windows-arm
+windows-arm64
 
 # By default we will build all systems. But with the 'sys' tag, a specific
 # system can be specified. This is useful to release for a subset of
