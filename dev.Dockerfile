@@ -16,7 +16,13 @@ ENV GODEBUG netdns=cgo
 COPY . /go/src/github.com/lightninglabs/lndinit
 
 # Install dependencies and build the binaries.
-RUN apk add --no-cache --update alpine-sdk \
+# Note: When using `docker build`, setting the environmental variable
+# `DOCKER_BUILDKIT=1` is required to enable
+# [BuildKit](https://docs.docker.com/build/buildkit)
+# so that the cache mounts can be used.
+RUN --mount=type=cache,target=/go/pkg/mod \
+  --mount=type=cache,target=/root/.cache/go-build \
+  apk add --no-cache --update alpine-sdk \
   git \
   make \
   &&  cd /go/src/github.com/lightninglabs/lndinit \
