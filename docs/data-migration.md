@@ -237,18 +237,18 @@ Help Options:
           --force-new-migration                       Force a new migration from the beginning of the source DB so the resume state will be discarded
           --force-verify-db                           Force a verification verifies two already marked (tombstoned and already migrated) dbs to make sure that the source db equals the
                                                       content of the destination db
-          --chunk-size=                               Chunk size for the migration in bytes
+          --chunk-size=                               Chunk size for the migration in bytes (default: 20971520, i.e. 20MB; max: 524288000, i.e. 500MB)
 
     source:
           --source.backend=[bolt]                     The source database backend. (default: bolt)
 
     bolt:
           --source.bolt.dbtimeout=                    Specify the timeout value used when opening the database. (default: 1m0s)
-          --source.bolt.data-dir=                     Lnd data dir where bolt dbs are located.
-          --source.bolt.tower-dir=                    Lnd watchtower dir where bolt dbs for the watchtower server are located.
+          --source.bolt.data-dir=                     Lnd data dir where bolt dbs are located. (default: ~/.lnd/data)
+          --source.bolt.tower-dir=                    Lnd watchtower dir where bolt dbs for the watchtower server are located. (default: ~/.lnd/data)
 
     dest:
-          --dest.backend=[postgres|sqlite]            The destination database backend. (default: postgres)
+          --dest.backend=[postgres|sqlite]            The destination database backend. (default: sqlite)
 
     postgres:
           --dest.postgres.dsn=                        Database connection string.
@@ -256,8 +256,8 @@ Help Options:
           --dest.postgres.maxconnections=             The maximum number of open connections to the database. Set to zero for unlimited.
 
     sqlite:
-          --dest.sqlite.data-dir=                     Lnd data dir where sqlite dbs are located.
-          --dest.sqlite.tower-dir=                    Lnd watchtower dir where sqlite dbs for the watchtower server are located.
+          --dest.sqlite.data-dir=                     Lnd data dir where sqlite dbs are located. (default: ~/.lnd/data)
+          --dest.sqlite.tower-dir=                    Lnd watchtower dir where sqlite dbs for the watchtower server are located. (default: ~/.lnd/data)
 
     sqlite-config:
           --dest.sqlite.sqlite-config.timeout=        The time after which a database query should be timed out.

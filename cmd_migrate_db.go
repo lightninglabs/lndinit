@@ -98,7 +98,7 @@ type migrateDBCommand struct {
 	PprofPort         int       `long:"pprof-port" description:"Enable pprof profiling on the specified port"`
 	ForceNewMigration bool      `long:"force-new-migration" description:"Force a new migration from the beginning of the source DB so the resume state will be discarded"`
 	ForceVerifyDB     bool      `long:"force-verify-db" description:"Force a verification verifies two already marked (tombstoned and already migrated) dbs to make sure that the source db equals the content of the destination db"`
-	ChunkSize         uint64    `long:"chunk-size" description:"Chunk size for the migration in bytes"`
+	ChunkSize         uint64    `long:"chunk-size" description:"Chunk size for the migration in bytes (default: 20971520, i.e. 20MB; max: 524288000, i.e. 500MB)"`
 }
 
 func newMigrateDBCommand() *migrateDBCommand {
@@ -112,7 +112,7 @@ func newMigrateDBCommand() *migrateDBCommand {
 			},
 		},
 		Dest: &DestDB{
-			Backend:  lncfg.PostgresBackend,
+			Backend:  lncfg.SqliteBackend,
 			Postgres: &postgres.Config{},
 			Sqlite: &Sqlite{
 				Config:   &sqlite.Config{},
