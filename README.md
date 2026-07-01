@@ -17,6 +17,7 @@ initialization, including seed and password generation.
 - [Example usage](#example-usage)
   - [Basic setup](#example-use-case-1-basic-setup)
   - [Kubernetes](#example-use-case-2-kubernetes)
+  - [HashiCorp Vault](#example-use-case-3-hashicorp-vault)
 - [Logging and idempotent operations](#logging-and-idempotent-operations)
 
 ## Requirements
@@ -377,6 +378,102 @@ $ lnd \
     --bitcoin.active \
     ...
     --wallet-unlock-password-file=/safe/location/walletpassword.txt
+```
+
+### Example use case 3: HashiCorp Vault
+
+This example shows how a [HashiCorp Vault](https://www.vaultproject.io/) KV v2
+secrets engine can be used to store the wallet seed and password instead of a
+Kubernetes Secret. Unlike the k8s variant, the seed and password never
+materialize as a Kubernetes Secret in `etcd`; `lndinit` reads and writes them
+directly against Vault.
+
+The `vault` source/target authenticates against Vault using the [Kubernetes auth
+method](https://developer.hashicorp.com/vault/docs/auth/kubernetes): the pod's
+projected ServiceAccount token is exchanged for a Vault token bound to a role
+and policy. The Vault server address is taken from the `VAULT_ADDR` environment
+variable (or the `--vault.addr` flag).
+
+The following flags are shared by the `init-wallet`, `store-secret` and
+`load-secret` commands under the `vault` namespace:
+
+- `--vault.addr`: The Vault server address (defaults to `VAULT_ADDR`).
+- `--vault.auth-mount`: The mount path of the Kubernetes auth method (default
+  `kubernetes`).
+- `--vault.auth-role`: The Vault role to assume (required).
+- `--vault.auth-token-path`: The ServiceAccount token file used to authenticate
+  (defaults to the standard projected token path).
+- `--vault.kv-mount`: The mount path of the KV v2 secrets engine (default
+  `secret`).
+- `--vault.secret-path`: The path of the secret within the KV v2 engine,
+  excluding the engine mount and the `data/` segment (e.g. `lnd/mynode/wallet`).
+
+#### 1. Store the wallet password and seed in Vault
+
+Each value is stored as a separate entry (key) within the same KV v2 secret. If
+an entry already exists, it is not overwritten and the operation is a no-op.
+
+```shell
+$ lndinit gen-password \
+    | lndinit -v store-secret \
+    --target=vault \
+    --vault.auth-role=lnd \
+    --vault.secret-path=lnd/mynode/wallet \
+    --vault.secret-key-name=walletpassword
+
+$ lndinit gen-seed \
+    | lndinit -v store-secret \
+    --target=vault \
+    --vault.auth-role=lnd \
+    --vault.secret-path=lnd/mynode/wallet \
+    --vault.secret-key-name=walletseed
+```
+
+#### 2. Initialize the wallet from Vault
+
+```shell
+$ lndinit -v init-wallet \
+    --secret-source=vault \
+    --vault.auth-role=lnd \
+    --vault.secret-path=lnd/mynode/wallet \
+    --vault.seed-key-name=walletseed \
+    --vault.wallet-password-key-name=walletpassword \
+    --init-file.output-wallet-dir=$HOME/.lnd/data/chain/bitcoin/mainnet \
+    --init-file.validate-password
+```
+
+#### 3. Auto unlock lnd from Vault
+
+As with the Kubernetes example, a named pipe can be used so the password is only
+read once during `lnd`'s startup.
+
+```shell
+$ mkfifo /tmp/wallet-password
+$ lndinit load-secret \
+    --source=vault \
+    --vault.auth-role=lnd \
+    --vault.secret-path=lnd/mynode/wallet \
+    --vault.secret-key-name=walletpassword > /tmp/wallet-password &
+
+$ lnd \
+    --bitcoin.active \
+    ...
+    --wallet-unlock-password-file=/tmp/wallet-password
+```
+
+A complete startup script that wires these steps together is available in
+[`example-init-wallet-vault.sh`](example-init-wallet-vault.sh).
+
+The Vault role referenced above must be bound to a policy that grants KV v2
+access to the wallet path, for example:
+
+```hcl
+path "secret/data/lnd/*" {
+  capabilities = ["create", "read", "update"]
+}
+path "secret/metadata/lnd/*" {
+  capabilities = ["read"]
+}
 ```
 
 ---
