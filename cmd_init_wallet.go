@@ -52,6 +52,30 @@ type secretSourceK8s struct {
 	Base64                bool   `long:"base64" description:"Encode as base64 when storing and decode as base64 when reading"`
 }
 
+type secretSourceVault struct {
+	Addr                  string `long:"addr" description:"The address of the Vault server; if unset, the VAULT_ADDR environment variable is used"`
+	AuthMount             string `long:"auth-mount" description:"The mount path of the Vault Kubernetes auth method"`
+	AuthRole              string `long:"auth-role" description:"The role to assume when logging into Vault via the Kubernetes auth method"`
+	AuthTokenPath         string `long:"auth-token-path" description:"The full path to the Kubernetes ServiceAccount token file that is used to authenticate against Vault"`
+	KVMount               string `long:"kv-mount" description:"The mount path of the KV v2 secrets engine the secret lives in"`
+	SecretPath            string `long:"secret-path" description:"The path of the secret within the KV v2 engine, excluding the engine mount and the 'data/' segment (e.g. 'lnd/mynode/wallet')"`
+	SeedKeyName           string `long:"seed-key-name" description:"The name of the entry within the secret that contains the seed"`
+	SeedPassphraseKeyName string `long:"seed-passphrase-key-name" description:"The name of the entry within the secret that contains the seed passphrase"`
+	WalletPasswordKeyName string `long:"wallet-password-key-name" description:"The name of the entry within the secret that contains the wallet password"`
+}
+
+func (s *secretSourceVault) options(keyName string) *vaultSecretOptions {
+	return &vaultSecretOptions{
+		Addr:          s.Addr,
+		AuthMount:     s.AuthMount,
+		AuthRole:      s.AuthRole,
+		AuthTokenPath: s.AuthTokenPath,
+		KVMount:       s.KVMount,
+		SecretPath:    s.SecretPath,
+		SecretKeyName: keyName,
+	}
+}
+
 type initTypeFile struct {
 	OutputWalletDir  string `long:"output-wallet-dir" description:"The directory in which the wallet.db file should be initialized"`
 	ValidatePassword bool   `long:"validate-password" description:"If a wallet file already exists in the output wallet directory, validate that it can be unlocked with the given password; this will try to decrypt the wallet and will take several seconds to complete"`
@@ -65,13 +89,14 @@ type initTypeRpc struct {
 }
 
 type initWalletCommand struct {
-	Network      string            `long:"network" description:"The Bitcoin network to initialize the wallet for, required for wallet internals" choice:"mainnet" choice:"testnet" choice:"testnet3" choice:"regtest" choice:"simnet"`
-	SecretSource string            `long:"secret-source" description:"Where to read the secrets from to initialize the wallet with" choice:"file" choice:"k8s"`
-	File         *secretSourceFile `group:"Flags for reading the secrets from files (use when --secret-source=file)" namespace:"file"`
-	K8s          *secretSourceK8s  `group:"Flags for reading the secrets from Kubernetes (use when --secret-source=k8s)" namespace:"k8s"`
-	InitType     string            `long:"init-type" description:"How to initialize the wallet" choice:"file" choice:"rpc"`
-	InitFile     *initTypeFile     `group:"Flags for initializing the wallet as a file (use when --init-type=file)" namespace:"init-file"`
-	InitRpc      *initTypeRpc      `group:"Flags for initializing the wallet through RPC (use when --init-type=rpc)" namespace:"init-rpc"`
+	Network      string             `long:"network" description:"The Bitcoin network to initialize the wallet for, required for wallet internals" choice:"mainnet" choice:"testnet" choice:"testnet3" choice:"regtest" choice:"simnet"`
+	SecretSource string             `long:"secret-source" description:"Where to read the secrets from to initialize the wallet with" choice:"file" choice:"k8s" choice:"vault"`
+	File         *secretSourceFile  `group:"Flags for reading the secrets from files (use when --secret-source=file)" namespace:"file"`
+	K8s          *secretSourceK8s   `group:"Flags for reading the secrets from Kubernetes (use when --secret-source=k8s)" namespace:"k8s"`
+	Vault        *secretSourceVault `group:"Flags for reading the secrets from HashiCorp Vault (use when --secret-source=vault)" namespace:"vault"`
+	InitType     string             `long:"init-type" description:"How to initialize the wallet" choice:"file" choice:"rpc"`
+	InitFile     *initTypeFile      `group:"Flags for initializing the wallet as a file (use when --init-type=file)" namespace:"init-file"`
+	InitRpc      *initTypeRpc       `group:"Flags for initializing the wallet through RPC (use when --init-type=rpc)" namespace:"init-rpc"`
 }
 
 func newInitWalletCommand() *initWalletCommand {
@@ -81,6 +106,11 @@ func newInitWalletCommand() *initWalletCommand {
 		File:         &secretSourceFile{},
 		K8s: &secretSourceK8s{
 			Namespace: defaultK8sNamespace,
+		},
+		Vault: &secretSourceVault{
+			AuthMount:     defaultVaultAuthMount,
+			AuthTokenPath: defaultK8sServiceAccountTokenPath,
+			KVMount:       defaultVaultKVMount,
 		},
 		InitType: typeFile,
 		InitFile: &initTypeFile{},
@@ -272,6 +302,40 @@ func (x *initWalletCommand) readInput(requireSeed bool) (string, string, string,
 			x.K8s.SecretName, x.K8s.Namespace)
 		k8sSecret.KeyName = x.K8s.WalletPasswordKeyName
 		walletPassword, _, err = readK8s(k8sSecret)
+		if err != nil {
+			return "", "", "", err
+		}
+
+	// Read the secrets from a HashiCorp Vault KV v2 secret.
+	case storageVault:
+		if requireSeed {
+			logger.Infof("Reading seed from vault secret %s",
+				x.Vault.SecretPath)
+			seed, _, err = readVault(
+				x.Vault.options(x.Vault.SeedKeyName),
+			)
+			if err != nil {
+				return "", "", "", err
+			}
+		}
+
+		// The seed passphrase is optional.
+		if x.Vault.SeedPassphraseKeyName != "" {
+			logger.Infof("Reading seed passphrase from vault "+
+				"secret %s", x.Vault.SecretPath)
+			seedPassPhrase, _, err = readVault(
+				x.Vault.options(x.Vault.SeedPassphraseKeyName),
+			)
+			if err != nil {
+				return "", "", "", err
+			}
+		}
+
+		logger.Infof("Reading wallet password from vault secret %s",
+			x.Vault.SecretPath)
+		walletPassword, _, err = readVault(
+			x.Vault.options(x.Vault.WalletPasswordKeyName),
+		)
 		if err != nil {
 			return "", "", "", err
 		}
