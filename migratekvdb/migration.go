@@ -100,6 +100,14 @@ type Migrator struct {
 	// also resume the verification.
 	verification *VerificationState
 
+	// verifyForAll, when true, uses the streaming ForAll read path for
+	// verification (one query per bucket) instead of the per-key cursor
+	// (one query per key). It is only enabled for a fresh (non-resuming)
+	// verification against a backend that supports kvdb.ExtendedRBucket
+	// (postgres/sqlite); resume and bolt targets fall back to the cursor
+	// path which is fully preserved.
+	verifyForAll bool
+
 	// Rate tracking fields to track the progress of the migration and
 	// verification.
 	startTimeMigration     time.Time
@@ -466,6 +474,10 @@ func (m *Migrator) migrateBucket(ctx context.Context,
 		}
 
 	case false:
+		// Emit progress once per bucket (time-gated) so bucket-heavy
+		// databases don't appear hung while migrating many small buckets.
+		m.logMigrationProgress(path)
+
 		// Only set sequence if source bucket has a non-zero sequence
 		// otherwise we keep for the sql case the sequence is a NULL
 		// value.
@@ -673,6 +685,12 @@ func (m *Migrator) VerifyMigration(ctx context.Context,
 		return err
 	}
 
+	// Decide the verification read strategy once for the whole run. A fresh
+	// verification can use the streaming ForAll path (one query per bucket);
+	// a resuming verification uses the cursor path which supports mid-bucket
+	// seek-based resume. Freezing this here avoids mixing paths mid-run.
+	m.verifyForAll = !m.verification.resuming
+
 	err = m.compareDBs(ctx, sourceDB, targetDB)
 	if err != nil {
 		return err
@@ -790,9 +808,163 @@ func (m *Migrator) compareDBs(ctx context.Context, srcDB,
 	}, func() {})
 }
 
-// walkAndCompare walks source and target buckets in parallel,
-// comparing their contents.
+// walkAndCompare walks source and target buckets in parallel, comparing their
+// contents. It dispatches to the streaming ForAll path when enabled and
+// supported, otherwise to the per-key cursor path.
 func (m *Migrator) walkAndCompare(ctx context.Context, srcBucket,
+	targetBucket kvdb.RBucket, bucketPath BucketPath) error {
+
+	if m.verifyForAll {
+		if ext, ok := targetBucket.(kvdb.ExtendedRBucket); ok {
+			return m.walkAndCompareForAll(
+				ctx, srcBucket, ext, bucketPath,
+			)
+		}
+	}
+
+	return m.walkAndCompareCursor(ctx, srcBucket, targetBucket, bucketPath)
+}
+
+// walkAndCompareForAll verifies a bucket by streaming the target's entries with
+// a single ForAll query (instead of one query per key) and comparing them in
+// lockstep against the source cursor. Nested buckets are recursed into only
+// after the streaming read completes, honoring ForAll's constraint that no
+// additional queries may be issued from within its callback.
+//
+// NOTE: This is used for fresh (non-resuming) verifications only; see
+// walkAndCompare.
+func (m *Migrator) walkAndCompareForAll(ctx context.Context, srcBucket kvdb.RBucket,
+	targetExt kvdb.ExtendedRBucket, bucketPath BucketPath) error {
+
+	m.cfg.Logger.Debugf("Walking and comparing bucket (ForAll): %v",
+		bucketPath)
+
+	// ExtendedRBucket embeds RBucket, so it exposes Sequence/NestedReadBucket.
+	if srcBucket.Sequence() != targetExt.Sequence() {
+		return fmt.Errorf("sequence number mismatch at path %v: "+
+			"source=%d target=%d", bucketPath, srcBucket.Sequence(),
+			targetExt.Sequence())
+	}
+
+	srcCursor := srcBucket.ReadCursor()
+	sk, sv := srcCursor.First()
+
+	// We buffer only the keys of nested sub-buckets (small) so we can recurse
+	// after the streaming read is done; leaf values are compared inline and
+	// never buffered.
+	// Emit progress once per bucket (time-gated inside the logger). This is
+	// essential for bucket-heavy databases: many buckets hold fewer than the
+	// per-key logging threshold, so without a per-bucket call the log would
+	// go silent for a long time and the migration would look hung.
+	m.logVerificationProgress(bucketPath)
+
+	var nestedKeys [][]byte
+	n := 0
+
+	err := targetExt.ForAll(func(tk, tv []byte) error {
+		// Periodically check for cancellation and log progress without
+		// paying the cost on every single key.
+		if n++; n&1023 == 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+			m.logVerificationProgress(bucketPath)
+		}
+
+		if sk == nil {
+			return fmt.Errorf("target bucket has extra entries at "+
+				"path %v, extra key %s", bucketPath,
+				loggableKeyName(tk))
+		}
+		if !bytes.Equal(sk, tk) {
+			return fmt.Errorf("key mismatch at path %v: source=%s "+
+				"target=%s", bucketPath, loggableKeyName(sk),
+				loggableKeyName(tk))
+		}
+
+		// We key the nested-vs-leaf decision on the SOURCE value only
+		// (bolt returns a nil value for a nested bucket, a non-nil value
+		// for a leaf), exactly like the cursor path. We must NOT compare
+		// (sv==nil)!=(tv==nil) directly: the sqlite driver decodes an
+		// empty stored value as nil while bolt/postgres return []byte{},
+		// so a legitimate empty-value leaf would otherwise false-fail as
+		// a "type mismatch". bytes.Equal treats nil and empty as equal.
+		if sv == nil {
+			// Source is a nested bucket; the target must be one too,
+			// i.e. it must not carry a (non-nil) value.
+			if tv != nil {
+				return fmt.Errorf("type mismatch at path %v key "+
+					"%s: source is a nested bucket, target is "+
+					"a value", bucketPath, loggableKeyName(sk))
+			}
+
+			kc := make([]byte, len(tk))
+			copy(kc, tk)
+			nestedKeys = append(nestedKeys, kc)
+		} else {
+			if !bytes.Equal(sv, tv) {
+				return fmt.Errorf("value mismatch at path %v key "+
+					"%s, source=%s target=%s", bucketPath,
+					loggableKeyName(sk), loggableKeyName(sv),
+					loggableKeyName(tv))
+			}
+
+			m.verification.persistedState.ProcessedKeys++
+			m.verifiedKeysSinceStart++
+		}
+
+		sk, sv = srcCursor.Next()
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// If the source still has entries, the target is missing some.
+	if sk != nil {
+		return fmt.Errorf("target bucket has fewer entries at path %v, "+
+			"missing key %s", bucketPath, loggableKeyName(sk))
+	}
+
+	// Now recurse into nested buckets (safe: the ForAll read is complete).
+	for _, nk := range nestedKeys {
+		srcNested := srcBucket.NestedReadBucket(nk)
+		if srcNested == nil {
+			return fmt.Errorf("source nested bucket access failed at "+
+				"path %v key %s", bucketPath, loggableKeyName(nk))
+		}
+		targetNested := targetExt.NestedReadBucket(nk)
+		if targetNested == nil {
+			return fmt.Errorf("target nested bucket access failed at "+
+				"path %v key %s", bucketPath, loggableKeyName(nk))
+		}
+
+		newPath := bucketPath.AppendBucket(nk)
+		targetNestedExt, ok := targetNested.(kvdb.ExtendedRBucket)
+		if !ok {
+			return fmt.Errorf("target nested bucket does not support "+
+				"ForAll at path %v", newPath)
+		}
+
+		if err := m.walkAndCompareForAll(
+			ctx, srcNested, targetNestedExt, newPath,
+		); err != nil {
+			return err
+		}
+
+		m.verification.persistedState.ProcessedBuckets++
+	}
+
+	return nil
+}
+
+// walkAndCompareCursor walks source and target buckets in parallel, comparing
+// their contents one key at a time via cursors. This is the resume-capable and
+// bolt-compatible fallback used when the streaming ForAll path is disabled.
+func (m *Migrator) walkAndCompareCursor(ctx context.Context, srcBucket,
 	targetBucket kvdb.RBucket, bucketPath BucketPath) error {
 
 	currentPath := m.verification.persistedState.CurrentBucketPath
@@ -802,6 +974,10 @@ func (m *Migrator) walkAndCompare(ctx context.Context, srcBucket,
 	case false:
 		m.cfg.Logger.Debugf("Walking and comparing bucket: %v",
 			bucketPath)
+
+		// Emit progress once per bucket (time-gated) so bucket-heavy
+		// databases don't appear hung. See walkAndCompareForAll.
+		m.logVerificationProgress(bucketPath)
 
 		// Check the sequence number of the source and target buckets.
 		if srcBucket.Sequence() != targetBucket.Sequence() {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -99,6 +100,7 @@ type migrateDBCommand struct {
 	ForceNewMigration bool      `long:"force-new-migration" description:"Force a new migration from the beginning of the source DB so the resume state will be discarded"`
 	ForceVerifyDB     bool      `long:"force-verify-db" description:"Force a verification verifies two already marked (tombstoned and already migrated) dbs to make sure that the source db equals the content of the destination db"`
 	ChunkSize         uint64    `long:"chunk-size" description:"Chunk size for the migration in bytes"`
+	BulkWrites        bool      `long:"bulk-writes" description:"Enable the fast postgres path for a fresh migration: batched multi-row INSERTs for the migration and batched child-fetch verification. Both drastically reduce round-trips (much faster over a network) but are only supported for a postgres destination and cannot resume an interrupted migration."`
 }
 
 func newMigrateDBCommand() *migrateDBCommand {
@@ -477,16 +479,38 @@ func (x *migrateDBCommand) Execute(_ []string) error {
 			return err
 		}
 
-		err = migrator.Migrate(ctx, srcDb, destDb)
+		// The batched bulk write path is only supported for a postgres
+		// destination. For any other backend we fall back to the standard
+		// (resumable) migration path.
+		useBulk := x.BulkWrites &&
+			x.Dest.Backend == lncfg.PostgresBackend
+		if x.BulkWrites && !useBulk {
+			logger.Warnf("Ignoring --bulk-writes for prefix `%s`: "+
+				"batched writes are only supported for a postgres "+
+				"destination; using the standard migration path",
+				prefix)
+		}
+
+		if useBulk {
+			err = x.migrateBulk(ctx, migrator, srcDb, prefix)
+		} else {
+			err = migrator.Migrate(ctx, srcDb, destDb)
+		}
 		if err != nil {
 			return err
 		}
 		logger.Infof("Migration of db with prefix %s completed", prefix)
 
 		// We migrated the DB successfully, now we verify the migration.
-		err = migrator.VerifyMigration(
-			ctx, srcDb, destDb, false,
-		)
+		// On the postgres fast path we use batched verification, which
+		// reads the target with far fewer round-trips (one query per batch
+		// of buckets instead of per bucket); otherwise we use the standard
+		// hierarchical verification.
+		if useBulk {
+			err = x.verifyBatched(ctx, migrator, srcDb, prefix)
+		} else {
+			err = migrator.VerifyMigration(ctx, srcDb, destDb, false)
+		}
 		if err != nil {
 			return err
 		}
@@ -587,6 +611,69 @@ func (x *migrateDBCommand) validateDBBackends() error {
 		return fmt.Errorf("destination database must be sqlite or "+
 			"postgres, got: %s", x.Dest.Backend)
 	}
+}
+
+// migrateBulk runs a fresh migration into a postgres destination using the
+// batched multi-row INSERT path. It opens a direct database/sql connection
+// because the batched writes cannot be expressed through the kvdb abstraction.
+//
+// The pgx driver is registered by the postgres kvdb backend, which is only
+// compiled with the kvdb_postgres build tag. Reaching this code implies the
+// destination backend is postgres, which in turn implies the binary was built
+// with that tag and the driver is available.
+func (x *migrateDBCommand) migrateBulk(ctx context.Context,
+	migrator *migratekvdb.Migrator, srcDb kvdb.Backend, prefix string) error {
+
+	rawDB, err := sql.Open("pgx", x.Dest.Postgres.Dsn)
+	if err != nil {
+		return fmt.Errorf("failed to open raw postgres connection for "+
+			"bulk migration: %w", err)
+	}
+
+	// The bulk path uses a single transaction, so a tiny pool is enough.
+	rawDB.SetMaxOpenConns(2)
+
+	// The kvdb postgres backend stores each namespace in a table named
+	// `<prefix>_kv` in the default (public) schema.
+	table := prefix + "_kv"
+
+	logger.Infof("Using batched bulk write path for prefix `%s` "+
+		"(table `%s`)", prefix, table)
+
+	migErr := migrator.MigrateBulkSQL(ctx, srcDb, rawDB, table, 0)
+	if closeErr := rawDB.Close(); closeErr != nil {
+		logger.Errorf("Error closing raw postgres connection: %v",
+			closeErr)
+	}
+
+	return migErr
+}
+
+// verifyBatched verifies a postgres destination using batched child fetches,
+// which issue one query per batch of buckets rather than one per bucket. Like
+// migrateBulk it needs a direct database/sql connection because the batching
+// works on the target's internal row ids, which kvdb does not expose.
+func (x *migrateDBCommand) verifyBatched(ctx context.Context,
+	migrator *migratekvdb.Migrator, srcDb kvdb.Backend, prefix string) error {
+
+	rawDB, err := sql.Open("pgx", x.Dest.Postgres.Dsn)
+	if err != nil {
+		return fmt.Errorf("failed to open raw postgres connection for "+
+			"batched verification: %w", err)
+	}
+	rawDB.SetMaxOpenConns(2)
+
+	table := prefix + "_kv"
+	logger.Infof("Using batched verification for prefix `%s` (table `%s`)",
+		prefix, table)
+
+	verifyErr := migrator.VerifyBatchedSQL(ctx, srcDb, rawDB, table, 0)
+	if closeErr := rawDB.Close(); closeErr != nil {
+		logger.Errorf("Error closing raw postgres connection: %v",
+			closeErr)
+	}
+
+	return verifyErr
 }
 
 // openSourceDb opens the source database and also checks if there is enough
