@@ -33,6 +33,15 @@ type persistedState struct {
 
 	// FinishedTime is the time when the verification is finished.
 	FinishedTime time.Time `json:"finished_time"`
+
+	// BulkInProgress is set to true by the bulk (batched) migration path
+	// after it has begun writing to the target but before it has confirmed
+	// completion. Because the target (SQL) and this meta DB (bolt) cannot
+	// share a transaction, this flag lets a re-run detect that a previous
+	// bulk attempt may have partially (or fully) committed to the target
+	// and safely recover by truncating and restarting, rather than getting
+	// stuck on the non-empty-target guard.
+	BulkInProgress bool `json:"bulk_in_progress"`
 }
 
 // String returns a string representation of the persisted state.

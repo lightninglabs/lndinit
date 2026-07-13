@@ -117,7 +117,8 @@ func (p *PostgresTestSetup) getDBConfigs() (*SourceDB, *DestDB) {
 // TestMigrateDBPostgres tests the migration of a database from Bolt to
 // Postgres.
 func TestMigrateDBPostgres(t *testing.T) {
-	t.Parallel()
+	// NOTE: not parallel. setupEmbeddedPostgres binds a fixed port (9877),
+	// shared with the other postgres tests, so these must run sequentially.
 
 	// Setup postgres.
 	setup := setupEmbeddedPostgres(t)
@@ -141,4 +142,35 @@ func TestMigrateDBPostgres(t *testing.T) {
 
 	err := cmd.Execute(nil)
 	require.NoError(t, err, "failed to execute migration")
+}
+
+// TestMigrateDBPostgresBulk runs the full migrate-db command end-to-end with the
+// batched bulk write path enabled, exercising the CLI wiring (raw pgx
+// connection, per-namespace table naming, markers and verification) across all
+// of the migrated databases.
+func TestMigrateDBPostgresBulk(t *testing.T) {
+	// NOTE: not parallel. The embedded postgres fixture binds a fixed port
+	// (shared with TestMigrateDBPostgres), so these must not run
+	// concurrently.
+
+	setup := setupEmbeddedPostgres(t)
+	defer func() {
+		require.NoError(t, setup.cleanup())
+	}()
+
+	setup.setupTestDir(t)
+	setup.createTestDatabase(t)
+
+	sourceDB, destDB := setup.getDBConfigs()
+
+	cmd := &migrateDBCommand{
+		Source:     sourceDB,
+		Dest:       destDB,
+		Network:    "regtest",
+		ChunkSize:  1024,
+		BulkWrites: true,
+	}
+
+	err := cmd.Execute(nil)
+	require.NoError(t, err, "failed to execute bulk migration")
 }
