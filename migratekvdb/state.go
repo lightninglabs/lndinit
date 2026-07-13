@@ -33,6 +33,11 @@ type persistedState struct {
 
 	// FinishedTime is the time when the verification is finished.
 	FinishedTime time.Time `json:"finished_time"`
+
+	// BulkInProgress is set by the fresh-only bulk path before it writes
+	// to the target database. If the process exits before the marker is
+	// cleared, the next bulk attempt resets the target and starts over.
+	BulkInProgress bool `json:"bulk_in_progress"`
 }
 
 // String returns a string representation of the persisted state.
