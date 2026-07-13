@@ -135,6 +135,15 @@ beginning (can only be done if the migration did still not succeed) use the
 flag `--force-new-migration` which can be used in combination with a 
 new `chunksize` limit.
 
+For fresh migrations into Postgres, `--bulk-writes` enables the faster bulk
+SQL-KV migration path. This path is not resumable midway through the target
+write. If an interrupted transaction left the target empty, the next bulk run
+starts that database prefix again automatically. If the target contains rows,
+recovery fails closed. The operator must add `--reset-bulk-target` to explicitly
+authorize **TRUNCATING the destination table and destroying all of its rows**
+before restarting. Do not authorize a reset unless the destination is the same
+database used by the interrupted attempt and its data can be discarded.
+
 In case you have successfully migrated several nodes and are not sure anymore 
 which source db corresponds to which destination db there is a flag called
 `force-verify-db` which only works if both dbs are marked as successfully
@@ -238,6 +247,8 @@ Help Options:
           --force-verify-db                           Force a verification verifies two already marked (tombstoned and already migrated) dbs to make sure that the source db equals the
                                                       content of the destination db
           --chunk-size=                               Chunk size for the migration in bytes
+          --bulk-writes                               Enable the fresh-only Postgres bulk migration path. This uses lnd's SQL KV migration API. The bulk path does not resume mid-migration.
+          --reset-bulk-target                         Allow recovery from an interrupted bulk migration to TRUNCATE a non-empty destination table, destroying all its rows, before restarting.
 
     source:
           --source.backend=[bolt]                     The source database backend. (default: bolt)
