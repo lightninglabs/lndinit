@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/v2"
 	"github.com/btcsuite/btcwallet/wallet"
 	"github.com/jessevdk/go-flags"
 	"github.com/lightninglabs/protobuf-hex-display/jsonpb" // nolint
