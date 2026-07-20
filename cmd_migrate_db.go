@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/btcutil/v2"
 	"github.com/btcsuite/btclog/v2"
 	"github.com/jessevdk/go-flags"
 	"github.com/lightninglabs/lndinit/migratekvdb"
@@ -37,6 +37,21 @@ var (
 	// defaultDataDir is the default data directory for lnd.
 	defaultDataDir = filepath.Join(btcutil.AppDataDir("lnd", false), "data")
 )
+
+// destinationBackend keeps the regular KV backend together with the optional
+// migration-only bulk capability selected when opening the destination.
+type destinationBackend struct {
+	kvdb.Backend
+
+	bulk bulkMigrationRunner
+}
+
+// bulkMigrationRunner hides the build-tagged Postgres bulk migration APIs
+// from the command's build-independent wiring.
+type bulkMigrationRunner interface {
+	migrate(context.Context, *migratekvdb.Migrator, kvdb.Backend, bool) error
+	verify(context.Context, *migratekvdb.Migrator, kvdb.Backend) error
+}
 
 const (
 	// walletMetaBucket is the name of the meta bucket in the wallet db
@@ -99,6 +114,8 @@ type migrateDBCommand struct {
 	ForceNewMigration bool      `long:"force-new-migration" description:"Force a new migration from the beginning of the source DB so the resume state will be discarded"`
 	ForceVerifyDB     bool      `long:"force-verify-db" description:"Force a verification verifies two already marked (tombstoned and already migrated) dbs to make sure that the source db equals the content of the destination db"`
 	ChunkSize         uint64    `long:"chunk-size" description:"Chunk size for the migration in bytes"`
+	BulkWrites        bool      `long:"bulk-writes" description:"Enable the fresh-only Postgres bulk migration path. This uses lnd's SQL KV migration API. The bulk path does not resume mid-migration."`
+	ResetBulkTarget   bool      `long:"reset-bulk-target" description:"Allow recovery from an interrupted bulk migration to TRUNCATE a non-empty destination table, destroying all its rows, before restarting."`
 }
 
 func newMigrateDBCommand() *migrateDBCommand {
@@ -299,7 +316,9 @@ func (x *migrateDBCommand) Execute(_ []string) error {
 
 		// We open the destination DB as well to make sure both that
 		// both DBs are either marked or not.
-		destDb, err := openDestDb(ctx, x.Dest, prefix, x.Network)
+		destDb, err := openDestDb(
+			ctx, x.Dest, prefix, x.Network, x.BulkWrites,
+		)
 		if err != nil {
 			return fmt.Errorf("failed to open destination "+
 				"db with prefix `%s`: %w", prefix, err)
@@ -477,16 +496,33 @@ func (x *migrateDBCommand) Execute(_ []string) error {
 			return err
 		}
 
-		err = migrator.Migrate(ctx, srcDb, destDb)
+		// The destination backend was already validated to be postgres
+		// when --bulk-writes is set (see validateDBBackends), so we can
+		// use the flag directly here.
+		useBulk := x.BulkWrites
+
+		if useBulk {
+			err = destDb.bulk.migrate(
+				ctx, migrator, srcDb, x.ResetBulkTarget,
+			)
+		} else {
+			err = migrator.Migrate(ctx, srcDb, destDb)
+		}
 		if err != nil {
 			return err
 		}
 		logger.Infof("Migration of db with prefix %s completed", prefix)
 
 		// We migrated the DB successfully, now we verify the migration.
-		err = migrator.VerifyMigration(
-			ctx, srcDb, destDb, false,
-		)
+		if useBulk {
+			err = destDb.bulk.verify(
+				ctx, migrator, srcDb,
+			)
+		} else {
+			err = migrator.VerifyMigration(
+				ctx, srcDb, destDb, false,
+			)
+		}
 		if err != nil {
 			return err
 		}
@@ -582,6 +618,22 @@ func (x *migrateDBCommand) validateDBBackends() error {
 	// Destination must be sqlite or postgres.
 	switch x.Dest.Backend {
 	case lncfg.SqliteBackend, lncfg.PostgresBackend:
+		// The bulk migration path is only implemented for a postgres
+		// destination. Fail loudly if the operator explicitly requested
+		// it against a different backend rather than silently falling
+		// back to the standard path.
+		if x.BulkWrites && x.Dest.Backend != lncfg.PostgresBackend {
+			return fmt.Errorf("--bulk-writes requires a postgres "+
+				"destination, got: %s", x.Dest.Backend)
+		}
+		if x.ResetBulkTarget && !x.BulkWrites {
+			return fmt.Errorf("--reset-bulk-target requires --bulk-writes")
+		}
+		if x.ResetBulkTarget && x.ForceNewMigration {
+			return fmt.Errorf("--reset-bulk-target cannot be combined " +
+				"with --force-new-migration")
+		}
+
 		return nil
 	default:
 		return fmt.Errorf("destination database must be sqlite or "+
@@ -645,8 +697,8 @@ func openSourceDb(cfg *SourceDB, prefix, network string,
 }
 
 // openDestDb opens the different types of databases.
-func openDestDb(ctx context.Context, cfg *DestDB, prefix,
-	network string) (kvdb.Backend, error) {
+func openDestDb(ctx context.Context, cfg *DestDB, prefix, network string,
+	bulkWrites bool) (*destinationBackend, error) {
 
 	backend := cfg.Backend
 
@@ -661,18 +713,23 @@ func openDestDb(ctx context.Context, cfg *DestDB, prefix,
 
 	switch backend {
 	case kvdb.PostgresBackendName:
-		args = []interface{}{
-			ctx,
-			&postgres.Config{
-				Dsn:            cfg.Postgres.Dsn,
-				Timeout:        time.Minute,
-				MaxConnections: 10,
-			},
-			prefix,
+		postgresCfg := &postgres.Config{
+			Dsn:            cfg.Postgres.Dsn,
+			Timeout:        time.Minute,
+			MaxConnections: 10,
 		}
-
 		logger.Infof("Opening postgres backend at `%s` with prefix `%s`",
 			cfg.Postgres.Dsn, prefix)
+
+		if bulkWrites {
+			return openPostgresBulkBackend(ctx, postgresCfg, prefix)
+		}
+
+		args = []interface{}{
+			ctx,
+			postgresCfg,
+			prefix,
+		}
 
 	case kvdb.SqliteBackendName:
 		// Directories where the db files are located.
@@ -763,7 +820,12 @@ func openDestDb(ctx context.Context, cfg *DestDB, prefix,
 		return nil, fmt.Errorf("unknown backend: %v", backend)
 	}
 
-	return kvdb.Open(backend, args...)
+	db, err := kvdb.Open(backend, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	return &destinationBackend{Backend: db}, nil
 }
 
 // checkMarkerPresent checks if a marker is present in the database.
