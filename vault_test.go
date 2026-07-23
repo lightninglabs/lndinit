@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/vault/api"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,6 +22,11 @@ func newTestVault(t *testing.T) (string, map[string]map[string]interface{}) {
 	t.Helper()
 
 	store := make(map[string]map[string]interface{})
+
+	// versions tracks the current KV v2 version per path so the fake can
+	// enforce check-and-set the way a real Vault does. An absent path is
+	// version zero.
+	versions := make(map[string]int)
 
 	const dataPrefix = "/v1/secret/data/"
 
@@ -64,23 +71,45 @@ func newTestVault(t *testing.T) (string, map[string]map[string]interface{}) {
 				"data": map[string]interface{}{
 					"data": data,
 					"metadata": map[string]interface{}{
-						"version":      1,
+						"version":      versions[path],
 						"created_time": "2020-01-01T00:00:00Z",
 					},
 				},
 			})
 
-		// KV v2 write: the payload wraps the values under a data key.
+		// KV v2 write: the payload wraps the values under a data key and an
+		// optional options.cas that must match the current version.
 		case http.MethodPost, http.MethodPut:
 			var body struct {
-				Data map[string]interface{} `json:"data"`
+				Data    map[string]interface{} `json:"data"`
+				Options struct {
+					Cas *int `json:"cas"`
+				} `json:"options"`
 			}
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+
+			if body.Options.Cas != nil &&
+				*body.Options.Cas != versions[path] {
+
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(
+					map[string]interface{}{
+						"errors": []string{
+							"check-and-set parameter did " +
+								"not match the current " +
+								"version",
+						},
+					},
+				)
+				return
+			}
+
 			store[path] = body.Data
+			versions[path]++
 
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"data": map[string]interface{}{
-					"version":      1,
+					"version":      versions[path],
 					"created_time": "2020-01-01T00:00:00Z",
 				},
 			})
@@ -232,4 +261,34 @@ func TestStoreSecretsVault(t *testing.T) {
 	// A missing secret path must be rejected.
 	badOpts := testVaultOptions(t, addr, "", "tls.cert")
 	require.Error(t, storeSecretsVault(entries, badOpts, false))
+}
+
+// TestVaultCheckAndSet verifies that writes are guarded with a check-and-set on
+// the version read, so a stale write (one that assumes an older version) is
+// rejected rather than silently overwriting a concurrent change, and that
+// isVaultCASMismatch recognizes the resulting error.
+func TestVaultCheckAndSet(t *testing.T) {
+	addr, _ := newTestVault(t)
+	opts := testVaultOptions(t, addr, "lnd/test/wallet", "walletseed")
+
+	// The first write creates version 1 via a create-only check-and-set.
+	require.NoError(t, saveVault("seed-a", opts, false))
+
+	// A direct write with a stale version (0, as if the secret were still
+	// absent) must be rejected the way a real Vault rejects it.
+	client, err := getClientVault(opts)
+	require.NoError(t, err)
+
+	_, err = client.KVv2(defaultVaultKVMount).Put(
+		context.Background(), opts.SecretPath,
+		map[string]interface{}{"walletseed": "seed-b"},
+		api.WithCheckAndSet(0),
+	)
+	require.Error(t, err)
+	require.True(t, isVaultCASMismatch(err))
+
+	// The original value is untouched by the rejected write.
+	content, _, err := readVault(opts)
+	require.NoError(t, err)
+	require.Equal(t, "seed-a", content)
 }

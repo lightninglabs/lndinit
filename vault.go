@@ -88,15 +88,20 @@ func saveVault(content string, opts *vaultSecretOptions, overwrite bool) error {
 	kv := client.KVv2(kvMount(opts))
 
 	// Read the current state of the secret so we can merge our entry into
-	// it. A not-found error just means we'll be creating the secret fresh.
+	// it, and capture its version so we can guard the write. A not-found
+	// error means we'll be creating it fresh, in which case a version of zero
+	// tells Vault to only write if the secret is still absent.
 	data := make(map[string]interface{})
+	var version int
 	existing, err := kv.Get(ctx, opts.SecretPath)
 	switch {
-	case err == nil && existing != nil && existing.Data != nil:
-		data = existing.Data
-
-	case err == nil:
-		// Secret exists but has no data, we'll initialize it below.
+	case err == nil && existing != nil:
+		if existing.Data != nil {
+			data = existing.Data
+		}
+		if existing.VersionMetadata != nil {
+			version = existing.VersionMetadata.Version
+		}
 
 	case errors.Is(err, api.ErrSecretNotFound):
 		// Secret doesn't exist yet, we'll create it below.
@@ -113,9 +118,17 @@ func saveVault(content string, opts *vaultSecretOptions, overwrite bool) error {
 
 	data[opts.SecretKeyName] = content
 
+	// Guard the write with a check-and-set on the version we read. If another
+	// process wrote to the secret between our read and this write, the version
+	// no longer matches and Vault rejects the write instead of silently
+	// overwriting the concurrent change. This gives the Vault backend the
+	// optimistic concurrency the Kubernetes backend gets from a resource
+	// version, and needs only create and update capabilities, so it works
+	// under a least-privilege policy that does not grant patch.
 	logger.Infof("Attempting to write entry %s of secret %s in vault",
 		opts.SecretKeyName, opts.SecretPath)
-	if _, err := kv.Put(ctx, opts.SecretPath, data); err != nil {
+	_, err = kv.Put(ctx, opts.SecretPath, data, api.WithCheckAndSet(version))
+	if err != nil {
 		return fmt.Errorf("error writing secret %s in vault: %v",
 			opts.SecretPath, err)
 	}
@@ -124,6 +137,13 @@ func saveVault(content string, opts *vaultSecretOptions, overwrite bool) error {
 		opts.SecretKeyName, opts.SecretPath)
 
 	return nil
+}
+
+// isVaultCASMismatch reports whether err is Vault's check-and-set version
+// mismatch, which means the secret was written concurrently between the read
+// and the write of a read-modify-write cycle.
+func isVaultCASMismatch(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "check-and-set")
 }
 
 // readVault reads a single entry from a KV v2 secret and returns its value
