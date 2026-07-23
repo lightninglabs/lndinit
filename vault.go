@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -38,6 +39,7 @@ type vaultSecretOptions struct {
 	KVMount       string `long:"kv-mount" description:"The mount path of the KV v2 secrets engine the secret lives in"`
 	SecretPath    string `long:"secret-path" description:"The path of the secret within the KV v2 engine, excluding the engine mount and the 'data/' segment (e.g. 'lnd/mynode/wallet')"`
 	SecretKeyName string `long:"secret-key-name" description:"The name of the key/entry within the secret"`
+	Base64        bool   `long:"base64" description:"Encode as base64 when storing and decode as base64 when reading; required for binary values since KV v2 stores entries as JSON strings"`
 }
 
 // jsonVaultObject is the subset of Vault response metadata that we surface when
@@ -82,6 +84,13 @@ func saveVault(content string, opts *vaultSecretOptions, overwrite bool) error {
 	client, err := getClientVault(opts)
 	if err != nil {
 		return err
+	}
+
+	// Optionally base64-encode the value so binary content survives KV v2's
+	// JSON string storage, which would otherwise replace invalid UTF-8 bytes
+	// with the Unicode replacement character.
+	if opts.Base64 {
+		content = base64.StdEncoding.EncodeToString([]byte(content))
 	}
 
 	ctx := context.Background()
@@ -194,6 +203,18 @@ func readVault(opts *vaultSecretOptions) (string, *jsonVaultObject, error) {
 	if len(content) == 0 {
 		return "", nil, fmt.Errorf("secret %s exists but the entry %s "+
 			"is empty", opts.SecretPath, opts.SecretKeyName)
+	}
+
+	// Undo the optional base64 encoding applied on write to recover the
+	// original (possibly binary) value.
+	if opts.Base64 {
+		decoded, err := base64.StdEncoding.DecodeString(content)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to base64 decode "+
+				"entry %s of secret %s: %v", opts.SecretKeyName,
+				opts.SecretPath, err)
+		}
+		content = string(decoded)
 	}
 
 	return content, newJSONVaultObject(secret), nil

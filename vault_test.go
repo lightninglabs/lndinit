@@ -292,3 +292,27 @@ func TestVaultCheckAndSet(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "seed-a", content)
 }
+
+// TestVaultBase64 verifies that a binary value is corrupted by KV v2's JSON
+// string storage when stored as-is, but round-trips intact when the base64
+// option is set.
+func TestVaultBase64(t *testing.T) {
+	addr, _ := newTestVault(t)
+	binary := string([]byte{0x01, 0xff, 0xfe, 0x80, 0x02})
+
+	// Stored as-is, the invalid UTF-8 bytes are replaced during JSON
+	// encoding, so the value does not survive the round trip.
+	plain := testVaultOptions(t, addr, "lnd/test/plain", "admin.macaroon")
+	require.NoError(t, saveVault(binary, plain, false))
+	got, _, err := readVault(plain)
+	require.NoError(t, err)
+	require.NotEqual(t, binary, got)
+
+	// With base64 the same value round-trips intact.
+	encoded := testVaultOptions(t, addr, "lnd/test/encoded", "admin.macaroon")
+	encoded.Base64 = true
+	require.NoError(t, saveVault(binary, encoded, false))
+	got, _, err = readVault(encoded)
+	require.NoError(t, err)
+	require.Equal(t, binary, got)
+}

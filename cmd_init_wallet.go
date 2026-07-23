@@ -62,6 +62,7 @@ type secretSourceVault struct {
 	SeedKeyName           string `long:"seed-key-name" description:"The name of the entry within the secret that contains the seed"`
 	SeedPassphraseKeyName string `long:"seed-passphrase-key-name" description:"The name of the entry within the secret that contains the seed passphrase"`
 	WalletPasswordKeyName string `long:"wallet-password-key-name" description:"The name of the entry within the secret that contains the wallet password"`
+	Base64                bool   `long:"base64" description:"Decode entries as base64 when reading; must match how the secrets were stored"`
 }
 
 func (s *secretSourceVault) options(keyName string) *vaultSecretOptions {
@@ -73,6 +74,7 @@ func (s *secretSourceVault) options(keyName string) *vaultSecretOptions {
 		KVMount:       s.KVMount,
 		SecretPath:    s.SecretPath,
 		SecretKeyName: keyName,
+		Base64:        s.Base64,
 	}
 }
 
