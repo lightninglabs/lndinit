@@ -44,8 +44,10 @@ func main() {
 	// just the global options, we do a pre-parsing without any commands
 	// registered yet. We ignore any errors as that'll be handled later.
 	_, _ = flags.NewParser(globalOpts, flags.IgnoreUnknown).Parse()
-	if globalOpts.Verbose {
-		globalOpts.DebugLevel = "error"
+	// An explicit --debuglevel always wins, -v only picks the level when
+	// none was given.
+	if globalOpts.Verbose && globalOpts.DebugLevel == "" {
+		globalOpts.DebugLevel = "info"
 	}
 
 	logger.Infof("Version %s commit=%s, debuglevel=%s", Version(), Commit,

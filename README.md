@@ -389,7 +389,9 @@ exist). This can make it hard to follow exactly what is happening when debugging
 the initialization. To assist with debugging, the following two flags can be
 used:
 
-- `--verbose (-v)`: Log debug information to `stderr`.
+- `--verbose (-v)`: Log progress information to `stderr`, equivalent to
+  `--debuglevel=info`. Use `--debuglevel=debug` or `--debuglevel=trace` for more
+  detail.
 - `--error-on-existing (-e)`: Exit with a non-zero return code (128) if the
   result of an operation already exists. See example below.
 
