@@ -82,6 +82,7 @@ type initTypeRpc struct {
 	WatchOnly         bool   `long:"watch-only" description:"Don't require a seed to be set, initialize the wallet as watch-only; requires the accounts-file flag to be specified"`
 	AccountsFile      string `long:"accounts-file" description:"The JSON file that contains all accounts xpubs for initializing a watch-only wallet"`
 	WatchOnlyBirthday string `long:"watch-only-birthday" description:"The birthday of the watch-only wallet's master key, either as a Unix timestamp in seconds, an RFC3339 timestamp or a YYYY-MM-DD date; if unset, lnd assumes the aezeed epoch (2017-08-24) and rescans the chain from there, which can take hours; requires the watch-only flag to be specified"`
+	RecoveryWindow    int32  `long:"recovery-window" description:"The address look-ahead used to scan for used keys when the wallet being initialized already has history; a value of zero, the default, means no addresses are recovered, which is what a brand new wallet wants"`
 }
 
 type initWalletCommand struct {
@@ -130,6 +131,17 @@ func (x *initWalletCommand) Execute(_ []string) error {
 		return fmt.Errorf("--init-rpc.watch-only-birthday can only " +
 			"be used in combination with --init-type=rpc and " +
 			"--init-rpc.watch-only")
+	}
+
+	// The recovery window applies to any wallet created through RPC, but
+	// there's nothing sensible we could do with a negative look-ahead.
+	if x.InitRpc.RecoveryWindow < 0 {
+		return fmt.Errorf("invalid recovery window %d, must not be "+
+			"negative", x.InitRpc.RecoveryWindow)
+	}
+	if x.InitRpc.RecoveryWindow != 0 && x.InitType != typeRpc {
+		return fmt.Errorf("--init-rpc.recovery-window can only be " +
+			"used in combination with --init-type=rpc")
 	}
 
 	// Do we require a seed? We don't if we do an RPC based, watch-only
@@ -247,9 +259,15 @@ func (x *initWalletCommand) Execute(_ []string) error {
 			}
 		}
 
+		if x.InitRpc.RecoveryWindow != 0 {
+			logger.Infof("Using address look-ahead of %d for "+
+				"recovery", x.InitRpc.RecoveryWindow)
+		}
+
 		return createWalletRpc(
 			seedWords, seedPassPhrase, walletPassword,
 			x.InitRpc.Server, x.InitRpc.TLSCertPath, watchOnly,
+			x.InitRpc.RecoveryWindow,
 		)
 
 	default:
@@ -453,7 +471,8 @@ func validateWallet(walletDir string, walletPassword []byte,
 }
 
 func createWalletRpc(seedWords []string, seedPassword, walletPassword,
-	rpcServer, tlsPath string, watchOnly *lnrpc.WatchOnly) error {
+	rpcServer, tlsPath string, watchOnly *lnrpc.WatchOnly,
+	recoveryWindow int32) error {
 
 	// Since this will potentially run for a while (we need to wait for
 	// compaction), make sure we catch any interrupt signals.
@@ -489,6 +508,7 @@ func createWalletRpc(seedWords []string, seedPassword, walletPassword,
 		AezeedPassphrase:   []byte(seedPassword),
 		WalletPassword:     []byte(walletPassword),
 		WatchOnly:          watchOnly,
+		RecoveryWindow:     recoveryWindow,
 	})
 	return err
 }

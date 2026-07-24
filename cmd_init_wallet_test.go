@@ -210,6 +210,54 @@ func TestWatchOnlyBirthdayRequiresWatchOnly(t *testing.T) {
 	}
 }
 
+// TestRecoveryWindowValidation makes sure a recovery window that can't be acted
+// on is rejected instead of being dropped on the floor, the same way the
+// birthday is.
+func TestRecoveryWindowValidation(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name           string
+		initType       string
+		recoveryWindow int32
+		expectedErr    string
+	}{{
+		name:           "negative window",
+		initType:       typeRpc,
+		recoveryWindow: -1,
+		expectedErr:    "must not be negative",
+	}, {
+		name:           "file init ignores the window",
+		initType:       typeFile,
+		recoveryWindow: 2500,
+		expectedErr:    "can only be used in combination with",
+	}, {
+		// A zero window is the default and means "don't recover", so it
+		// stays valid no matter which init type is used. This gets far
+		// enough to fail on the missing seed file instead, which we
+		// assert on through the sentinel that main maps to exit code
+		// EXIT_CODE_INPUT_MISSING rather than through the wrapping
+		// message.
+		name:           "zero window is always fine",
+		initType:       typeFile,
+		recoveryWindow: 0,
+		expectedErr:    errInputMissing,
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := newInitWalletCommand()
+			cmd.InitType = tc.initType
+			cmd.InitRpc.RecoveryWindow = tc.recoveryWindow
+
+			err := cmd.Execute(nil)
+			require.ErrorContains(t, err, tc.expectedErr)
+		})
+	}
+}
+
 func writeToTempFile(t *testing.T, data []byte) string {
 	tempFileName, err := os.CreateTemp("", "*.txt")
 	require.NoError(t, err)

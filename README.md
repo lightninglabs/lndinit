@@ -340,6 +340,14 @@ seconds, as an RFC3339 timestamp (`2024-07-01T00:00:00Z`) or as a plain
 date slightly _before_ the seed was created, since a birthday that is too late
 makes `lnd` skip the blocks the wallet's funds are in.
 
+A wallet that already has history needs one more flag,
+`--init-rpc.recovery-window`, which sets the address look-ahead `lnd` uses to
+scan for keys that have been used. It defaults to zero, meaning no addresses are
+recovered, which is the right answer for a brand new node. When re-creating a
+wallet that has been in use, set it the way `lncli createwatchonly` does (it
+prompts with a default of `2500`), otherwise the rescan starts at the right
+height but never derives far enough to find the wallet's addresses.
+
 #### 5. Store the wallet password in a file
 
 Because we now only have the wallet password as a value in a k8s secret, we need
