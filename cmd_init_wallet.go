@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +32,24 @@ const (
 
 	typeFile = "file"
 	typeRpc  = "rpc"
+
+	// birthdayDateFormat is the calendar date notation a watch-only
+	// wallet's birthday can be expressed in, next to a raw Unix timestamp
+	// and a full RFC3339 timestamp.
+	birthdayDateFormat = "2006-01-02"
+
+	// maxBirthdayDrift is how far into the future a watch-only wallet's
+	// birthday is allowed to be. We tolerate some slack to account for
+	// clock skew between the machine that produced the timestamp and the
+	// one running lndinit. Anything beyond that is rejected, since a
+	// birthday far enough in the future makes lnd start scanning at the
+	// chain tip, where it would miss any funds the wallet already holds.
+	//
+	// The window is a day rather than something tighter because btcwallet
+	// rewinds the birthday by 48 hours before it looks for the birthday
+	// block, so a value inside this window still starts the scan at least a
+	// day before the wallet could have been created.
+	maxBirthdayDrift = 24 * time.Hour
 )
 
 var (
@@ -58,10 +77,11 @@ type initTypeFile struct {
 }
 
 type initTypeRpc struct {
-	Server       string `long:"server" description:"The host:port of the RPC server to connect to"`
-	TLSCertPath  string `long:"tls-cert-path" description:"The full path to the RPC server's TLS certificate"`
-	WatchOnly    bool   `long:"watch-only" description:"Don't require a seed to be set, initialize the wallet as watch-only; requires the accounts-file flag to be specified"`
-	AccountsFile string `long:"accounts-file" description:"The JSON file that contains all accounts xpubs for initializing a watch-only wallet"`
+	Server            string `long:"server" description:"The host:port of the RPC server to connect to"`
+	TLSCertPath       string `long:"tls-cert-path" description:"The full path to the RPC server's TLS certificate"`
+	WatchOnly         bool   `long:"watch-only" description:"Don't require a seed to be set, initialize the wallet as watch-only; requires the accounts-file flag to be specified"`
+	AccountsFile      string `long:"accounts-file" description:"The JSON file that contains all accounts xpubs for initializing a watch-only wallet"`
+	WatchOnlyBirthday string `long:"watch-only-birthday" description:"The birthday of the watch-only wallet's master key, either as a Unix timestamp in seconds, an RFC3339 timestamp or a YYYY-MM-DD date; if unset, lnd assumes the aezeed epoch (2017-08-24) and rescans the chain from there, which can take hours; requires the watch-only flag to be specified"`
 }
 
 type initWalletCommand struct {
@@ -102,6 +122,16 @@ func (x *initWalletCommand) Register(parser *flags.Parser) error {
 }
 
 func (x *initWalletCommand) Execute(_ []string) error {
+	// A birthday can only be given for a watch-only wallet created through
+	// RPC. Any other wallet is created from a seed that carries its birthday
+	// with it, so silently ignoring the flag there would be misleading.
+	birthdayApplies := x.InitType == typeRpc && x.InitRpc.WatchOnly
+	if x.InitRpc.WatchOnlyBirthday != "" && !birthdayApplies {
+		return fmt.Errorf("--init-rpc.watch-only-birthday can only " +
+			"be used in combination with --init-type=rpc and " +
+			"--init-rpc.watch-only")
+	}
+
 	// Do we require a seed? We don't if we do an RPC based, watch-only
 	// initialization.
 	requireSeed := (x.InitType == typeFile) ||
@@ -157,6 +187,32 @@ func (x *initWalletCommand) Execute(_ []string) error {
 		// seed to be present but instead want to read an accounts JSON
 		// file that contains all the wallet's xpubs.
 		if x.InitRpc.WatchOnly {
+			// The accounts JSON file doesn't carry the birthday of
+			// the master key the accounts were derived from, so the
+			// operator has to tell us what it is. Without it lnd
+			// rescans the chain from the aezeed epoch, which on
+			// mainnet means walking hundreds of thousands of
+			// blocks.
+			birthday, err := parseWatchOnlyBirthday(
+				x.InitRpc.WatchOnlyBirthday, x.Network,
+			)
+			if err != nil {
+				return err
+			}
+
+			if birthday == 0 {
+				logger.Warn("No wallet birthday specified, " +
+					"lnd will rescan the chain from the " +
+					"aezeed epoch (2017-08-24) which can " +
+					"take multiple hours; use " +
+					"--init-rpc.watch-only-birthday to " +
+					"start the rescan at the wallet's " +
+					"actual birthday instead")
+			} else {
+				logger.Infof("Using wallet birthday %s",
+					formatBirthday(birthday))
+			}
+
 			// For initializing a watch-only wallet we need the
 			// accounts JSON file.
 			logger.Info("Reading accounts from file")
@@ -186,7 +242,7 @@ func (x *initWalletCommand) Execute(_ []string) error {
 			}
 
 			watchOnly = &lnrpc.WatchOnly{
-				MasterKeyBirthdayTimestamp: 0,
+				MasterKeyBirthdayTimestamp: birthday,
 				Accounts:                   rpcAccounts,
 			}
 		}
@@ -454,6 +510,72 @@ func checkSeed(seed, seedPassPhrase string) (*aezeed.CipherSeed, error) {
 	}
 
 	return cipherSeed, nil
+}
+
+// parseWatchOnlyBirthday turns the operator provided birthday of a watch-only
+// wallet's master key into a Unix timestamp in seconds, as expected by lnd's
+// InitWallet RPC. An empty value means the birthday is unknown and results in a
+// zero timestamp, which makes lnd fall back to its own default.
+func parseWatchOnlyBirthday(birthday, network string) (uint64, error) {
+	if birthday == "" {
+		return 0, nil
+	}
+
+	birthdayTime, err := parseTimestampOrDate(birthday)
+	if err != nil {
+		return 0, fmt.Errorf("error parsing wallet birthday: %v", err)
+	}
+
+	// A birthday from before the chain itself existed can only be a
+	// mistake, and would make lnd rescan all the way from the genesis
+	// block.
+	netParams, err := getNetworkParams(network)
+	if err != nil {
+		return 0, err
+	}
+	genesisTime := netParams.GenesisBlock.Header.Timestamp
+	if birthdayTime.Before(genesisTime) {
+		return 0, fmt.Errorf("invalid wallet birthday %s, is before "+
+			"the %s genesis block time %s",
+			birthdayTime.Format(time.RFC3339), network,
+			genesisTime.UTC().Format(time.RFC3339))
+	}
+
+	if birthdayTime.After(time.Now().Add(maxBirthdayDrift)) {
+		return 0, fmt.Errorf("invalid wallet birthday %s, is more "+
+			"than %v in the future (are the units seconds?)",
+			birthdayTime.Format(time.RFC3339), maxBirthdayDrift)
+	}
+
+	return uint64(birthdayTime.Unix()), nil
+}
+
+// parseTimestampOrDate parses a point in time that is either given as a Unix
+// timestamp in seconds, as an RFC3339 timestamp or as a plain calendar date.
+// Dates without a time of day are interpreted as midnight UTC.
+func parseTimestampOrDate(value string) (time.Time, error) {
+	// A bare number is a Unix timestamp in seconds.
+	seconds, err := strconv.ParseInt(value, 10, 64)
+	if err == nil {
+		return time.Unix(seconds, 0).UTC(), nil
+	}
+
+	for _, layout := range []string{time.RFC3339, birthdayDateFormat} {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed.UTC(), nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("value %q is neither a Unix timestamp "+
+		"in seconds, an RFC3339 timestamp nor a %s date", value,
+		birthdayDateFormat)
+}
+
+// formatBirthday renders a Unix timestamp in seconds as a human readable UTC
+// timestamp for logging.
+func formatBirthday(birthday uint64) string {
+	return time.Unix(int64(birthday), 0).UTC().Format(time.RFC3339)
 }
 
 func getNetworkParams(network string) (*chaincfg.Params, error) {
