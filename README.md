@@ -324,8 +324,21 @@ $ lndinit -v init-wallet \
     --init-rpc.server=localhost:10009 \
     --init-rpc.tls-cert-path=$HOME/.lnd/tls.cert \
     --init-rpc.watch-only \
-    --init-rpc.accounts-file=/tmp/accounts.json
+    --init-rpc.accounts-file=/tmp/accounts.json \
+    --init-rpc.watch-only-birthday=2024-07-01
 ```
+
+**NOTE**: The accounts JSON file only contains the account xpubs, not the
+birthday of the master key they were derived from. If
+`--init-rpc.watch-only-birthday` isn't specified, `lnd` has to assume the aezeed
+epoch (`2017-08-24`) as the wallet's birthday and rescans the chain from there,
+which on mainnet means walking hundreds of thousands of blocks and can take
+multiple hours. Pointing the flag at the actual birthday of the seed on the
+remote signer avoids that. The value can be given as a Unix timestamp in
+seconds, as an RFC3339 timestamp (`2024-07-01T00:00:00Z`) or as a plain
+`YYYY-MM-DD` date, which is interpreted as midnight UTC. When in doubt, pick a
+date slightly _before_ the seed was created, since a birthday that is too late
+makes `lnd` skip the blocks the wallet's funds are in.
 
 #### 5. Store the wallet password in a file
 
