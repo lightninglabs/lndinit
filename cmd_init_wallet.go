@@ -69,7 +69,7 @@ type initWalletCommand struct {
 	SecretSource string            `long:"secret-source" description:"Where to read the secrets from to initialize the wallet with" choice:"file" choice:"k8s"`
 	File         *secretSourceFile `group:"Flags for reading the secrets from files (use when --secret-source=file)" namespace:"file"`
 	K8s          *secretSourceK8s  `group:"Flags for reading the secrets from Kubernetes (use when --secret-source=k8s)" namespace:"k8s"`
-	InitType     string            `long:"init-type" description:"How to initialize the wallet" choice:"file" choice:"rpc"`
+	InitType     string            `long:"init-type" description:"How to initialize the wallet" choice:"file" (default) choice:"rpc"`
 	InitFile     *initTypeFile     `group:"Flags for initializing the wallet as a file (use when --init-type=file)" namespace:"init-file"`
 	InitRpc      *initTypeRpc      `group:"Flags for initializing the wallet through RPC (use when --init-type=rpc)" namespace:"init-rpc"`
 }

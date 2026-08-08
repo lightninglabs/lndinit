@@ -55,7 +55,7 @@ No `lnd` needed, but seed will be in `lnd`-specific [`aezeed` format](https://gi
 
 ### init-wallet
 `init-wallet` has two modes:
-- `--init-type=file` creates an `lnd` specific `wallet.db` file
+- `--init-type=file` (the default) creates an `lnd` specific `wallet.db` file
   - Only works if `lnd` is NOT running yet
 - `--init-type=rpc` calls the `lnd` RPC to create a wallet
   - Use this mode if you are using a remote database as `lnd`'s storage backend instead of bolt DB based file databases
