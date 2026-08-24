@@ -7,9 +7,10 @@ import (
 )
 
 type loadSecretCommand struct {
-	Source string            `long:"source" short:"s" description:"Secret storage source" choice:"k8s"`
-	K8s    *k8sSecretOptions `group:"Flags for looking up the secret as a value inside a Kubernetes Secret (use when --source=k8s)" namespace:"k8s"`
-	Output string            `long:"output" short:"o" description:"Output format" choice:"raw" choice:"json"`
+	Source string              `long:"source" short:"s" description:"Secret storage source" choice:"k8s" choice:"vault"`
+	K8s    *k8sSecretOptions   `group:"Flags for looking up the secret as a value inside a Kubernetes Secret (use when --source=k8s)" namespace:"k8s"`
+	Vault  *vaultSecretOptions `group:"Flags for looking up the secret as an entry inside a HashiCorp Vault KV v2 secret (use when --source=vault)" namespace:"vault"`
+	Output string              `long:"output" short:"o" description:"Output format" choice:"raw" choice:"json"`
 }
 
 func newLoadSecretCommand() *loadSecretCommand {
@@ -17,6 +18,11 @@ func newLoadSecretCommand() *loadSecretCommand {
 		Source: storageK8s,
 		K8s: &k8sSecretOptions{
 			Namespace: defaultK8sNamespace,
+		},
+		Vault: &vaultSecretOptions{
+			AuthMount:     defaultVaultAuthMount,
+			AuthTokenPath: defaultK8sServiceAccountTokenPath,
+			KVMount:       defaultVaultKVMount,
 		},
 		Output: outputFormatRaw,
 	}
@@ -59,6 +65,31 @@ func (x *loadSecretCommand) Execute(_ []string) error {
 			}{
 				jsonK8sObject: secret,
 				Value:         content,
+			})
+			if err != nil {
+				return fmt.Errorf("error encoding as JSON: %v",
+					err)
+			}
+		}
+
+		fmt.Printf("%s\n", content)
+
+		return nil
+
+	case storageVault:
+		content, secret, err := readVault(x.Vault)
+		if err != nil {
+			return fmt.Errorf("error reading secret %s from "+
+				"vault: %v", x.Vault.SecretPath, err)
+		}
+
+		if x.Output == outputFormatJSON {
+			content, err = asJSON(&struct {
+				*jsonVaultObject `json:",inline"`
+				Value            string `json:"value"`
+			}{
+				jsonVaultObject: secret,
+				Value:           content,
 			})
 			if err != nil {
 				return fmt.Errorf("error encoding as JSON: %v",

@@ -22,10 +22,11 @@ type entry struct {
 }
 
 type storeSecretCommand struct {
-	Batch     bool             `long:"batch" description:"Instead of reading one secret from stdin, read all files of the argument list and store them as entries in the secret"`
-	Overwrite bool             `long:"overwrite" description:"Overwrite existing secret entries instead of aborting"`
-	Target    string           `long:"target" short:"t" description:"Secret storage target" choice:"k8s"`
-	K8s       *targetK8sSecret `group:"Flags for storing the secret as a value inside a Kubernetes Secret (use when --target=k8s)" namespace:"k8s"`
+	Batch     bool                `long:"batch" description:"Instead of reading one secret from stdin, read all files of the argument list and store them as entries in the secret"`
+	Overwrite bool                `long:"overwrite" description:"Overwrite existing secret entries instead of aborting"`
+	Target    string              `long:"target" short:"t" description:"Secret storage target" choice:"k8s" choice:"vault"`
+	K8s       *targetK8sSecret    `group:"Flags for storing the secret as a value inside a Kubernetes Secret (use when --target=k8s)" namespace:"k8s"`
+	Vault     *vaultSecretOptions `group:"Flags for storing the secret as an entry inside a HashiCorp Vault KV v2 secret (use when --target=vault)" namespace:"vault"`
 }
 
 func newStoreSecretCommand() *storeSecretCommand {
@@ -38,6 +39,11 @@ func newStoreSecretCommand() *storeSecretCommand {
 			Helm: &helmOptions{
 				ResourcePolicy: defaultK8sResourcePolicy,
 			},
+		},
+		Vault: &vaultSecretOptions{
+			AuthMount:     defaultVaultAuthMount,
+			AuthTokenPath: defaultK8sServiceAccountTokenPath,
+			KVMount:       defaultVaultKVMount,
 		},
 	}
 }
@@ -101,6 +107,15 @@ func (x *storeSecretCommand) Execute(args []string) error {
 
 		return storeSecretsK8s(entries, x.K8s, x.Overwrite)
 
+	case storageVault:
+		// Take the actual entry key from the options if we aren't in
+		// batch mode.
+		if len(entries) == 1 && entries[0].key == "" {
+			entries[0].key = x.Vault.SecretKeyName
+		}
+
+		return storeSecretsVault(entries, x.Vault, x.Overwrite)
+
 	default:
 		return fmt.Errorf("invalid secret storage target %s", x.Target)
 	}
@@ -133,6 +148,35 @@ func storeSecretsK8s(entries []*entry, opts *targetK8sSecret,
 		if err != nil {
 			return fmt.Errorf("error storing secret %s key %s: "+
 				"%v", opts.SecretName, entry.key, err)
+		}
+	}
+
+	return nil
+}
+
+func storeSecretsVault(entries []*entry, opts *vaultSecretOptions,
+	overwrite bool) error {
+
+	if opts.SecretPath == "" {
+		return fmt.Errorf("secret path is required")
+	}
+
+	for _, entry := range entries {
+		if entry.key == "" {
+			return fmt.Errorf("secret key name is required")
+		}
+
+		// Each entry is stored under its own key within the same KV v2
+		// secret, so we only vary the key name between iterations.
+		entryOpts := *opts
+		entryOpts.SecretKeyName = entry.key
+
+		logger.Infof("Storing entry with name %s to secret %s in vault",
+			entryOpts.SecretKeyName, entryOpts.SecretPath)
+		err := saveVault(entry.value, &entryOpts, overwrite)
+		if err != nil {
+			return fmt.Errorf("error storing secret %s entry %s: "+
+				"%v", opts.SecretPath, entry.key, err)
 		}
 	}
 
