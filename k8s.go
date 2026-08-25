@@ -243,11 +243,8 @@ func updateSecretValueK8s(client *kubernetes.Clientset, secret *api.Secret,
 			"%v", opts.Name, opts.Namespace, err)
 	}
 
-	jsonSecret, _ := asJSON(jsonK8sObject{
-		TypeMeta:   updatedSecret.TypeMeta,
-		ObjectMeta: updatedSecret.ObjectMeta,
-	})
-	logger.Infof("Updated secret: %s", jsonSecret)
+	logger.Infof("Updated secret %s in namespace %s",
+		updatedSecret.Name, opts.Namespace)
 
 	return nil
 }
@@ -291,11 +288,8 @@ func createSecretK8s(client *kubernetes.Clientset, opts *k8sObjectOptions,
 			"%v", opts.Name, opts.Namespace, err)
 	}
 
-	jsonSecret, _ := asJSON(jsonK8sObject{
-		TypeMeta:   updatedSecret.TypeMeta,
-		ObjectMeta: updatedSecret.ObjectMeta,
-	})
-	logger.Infof("Created secret: %s", jsonSecret)
+	logger.Infof("Created secret %s in namespace %s",
+		updatedSecret.Name, opts.Namespace)
 
 	return nil
 }

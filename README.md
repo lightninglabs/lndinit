@@ -325,8 +325,29 @@ $ lndinit -v init-wallet \
     --init-rpc.server=localhost:10009 \
     --init-rpc.tls-cert-path=$HOME/.lnd/tls.cert \
     --init-rpc.watch-only \
-    --init-rpc.accounts-file=/tmp/accounts.json
+    --init-rpc.accounts-file=/tmp/accounts.json \
+    --init-rpc.watch-only-birthday=2024-07-01
 ```
+
+**NOTE**: The accounts JSON file only contains the account xpubs, not the
+birthday of the master key they were derived from. If
+`--init-rpc.watch-only-birthday` isn't specified, `lnd` has to assume the aezeed
+epoch (`2017-08-24`) as the wallet's birthday and rescans the chain from there,
+which on mainnet means walking hundreds of thousands of blocks and can take
+multiple hours. Pointing the flag at the actual birthday of the seed on the
+remote signer avoids that. The value can be given as a Unix timestamp in
+seconds, as an RFC3339 timestamp (`2024-07-01T00:00:00Z`) or as a plain
+`YYYY-MM-DD` date, which is interpreted as midnight UTC. When in doubt, pick a
+date slightly _before_ the seed was created, since a birthday that is too late
+makes `lnd` skip the blocks the wallet's funds are in.
+
+A wallet that already has history needs one more flag,
+`--init-rpc.recovery-window`, which sets the address look-ahead `lnd` uses to
+scan for keys that have been used. It defaults to zero, meaning no addresses are
+recovered, which is the right answer for a brand new node. When re-creating a
+wallet that has been in use, set it the way `lncli createwatchonly` does (it
+prompts with a default of `2500`), otherwise the rescan starts at the right
+height but never derives far enough to find the wallet's addresses.
 
 #### 5. Store the wallet password in a file
 
@@ -486,7 +507,9 @@ exist). This can make it hard to follow exactly what is happening when debugging
 the initialization. To assist with debugging, the following two flags can be
 used:
 
-- `--verbose (-v)`: Log debug information to `stderr`.
+- `--verbose (-v)`: Log progress information to `stderr`, equivalent to
+  `--debuglevel=info`. Use `--debuglevel=debug` or `--debuglevel=trace` for more
+  detail.
 - `--error-on-existing (-e)`: Exit with a non-zero return code (128) if the
   result of an operation already exists. See example below.
 
