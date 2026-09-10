@@ -564,3 +564,37 @@ any code in this repo._
 
 For more detail, refer to the [docker.yml](.github/workflows/docker.yml)
 Github workflow.
+
+### store-account-backup
+
+`store-account-backup` exports LND's versioned `--wallet-account-backup` public
+recovery file into one key of a dedicated Kubernetes Secret:
+
+```sh
+lndinit store-account-backup --file=/backup/wallet-accounts.json \
+  --namespace=wallet --secret-name=node-account-recovery --timeout=10s
+```
+
+This command requires an LND build with synchronous account recovery recording.
+It accepts that version 1 file format, not legacy WalletKit ListAccounts JSON.
+No LND RPC credentials are required. The pod ServiceAccount needs `get`,
+`create`, and `update` for Secrets in the explicitly required namespace.
+
+The export preserves all account fields, account identities and both branch
+count maxima. It writes the whole document atomically and retries conflicts
+against the latest resourceVersion. It preserves unrelated Secret keys. Use a
+separate Secret so its lifecycle is independent of RPC credential provisioning.
+The `accounts.json` value uses ordinary Kubernetes byte encoding; the legacy
+extra-base64 option for RPC credentials does not apply.
+
+Run once at startup and periodically under a supervisor. Read/write failures
+return nonzero without printing metadata or Kubernetes response bodies. Retry
+on the next interval. Identity or network mismatches require correcting the
+input wallet or target configuration; retries alone cannot repair them. Preserve
+the existing recovery Secret while investigating. Do not delete its recorded
+identities to force an unrelated wallet's export to succeed.
+
+The LND file on independent durable storage remains the
+authoritative copy: an asynchronous export alone cannot protect keys issued
+after its last successful write. Loss of both wallet storage and that file
+requires reconciliation beyond the exported lower bounds.
