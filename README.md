@@ -330,8 +330,8 @@ $ lndinit -v init-wallet \
 
 **NOTE**: The accounts JSON file only contains the account xpubs, not the
 birthday of the master key they were derived from. If
-`--init-rpc.watch-only-birthday` isn't specified, `lnd` has to assume the aezeed
-epoch (`2017-08-24`) as the wallet's birthday and rescans the chain from there,
+`--init-rpc.watch-only-birthday` isn't specified, `lnd` has to use the first
+SegWit block (`2017-08-24`) as the wallet's birthday and rescans from there,
 which on mainnet means walking hundreds of thousands of blocks and can take
 multiple hours. Pointing the flag at the actual birthday of the seed on the
 remote signer avoids that. The value can be given as a Unix timestamp in

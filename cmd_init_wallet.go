@@ -81,7 +81,7 @@ type initTypeRpc struct {
 	TLSCertPath       string `long:"tls-cert-path" description:"The full path to the RPC server's TLS certificate"`
 	WatchOnly         bool   `long:"watch-only" description:"Don't require a seed to be set, initialize the wallet as watch-only; requires the accounts-file flag to be specified"`
 	AccountsFile      string `long:"accounts-file" description:"The JSON file that contains all accounts xpubs for initializing a watch-only wallet"`
-	WatchOnlyBirthday string `long:"watch-only-birthday" description:"The birthday of the watch-only wallet's master key, either as a Unix timestamp in seconds, an RFC3339 timestamp or a YYYY-MM-DD date; if unset, lnd assumes the aezeed epoch (2017-08-24) and rescans the chain from there, which can take hours; requires the watch-only flag to be specified"`
+	WatchOnlyBirthday string `long:"watch-only-birthday" description:"The birthday of the watch-only wallet's master key, either as a Unix timestamp in seconds, an RFC3339 timestamp or a YYYY-MM-DD date; if unset, lnd assumes the first SegWit block (2017-08-24) and rescans the chain from there, which can take hours; requires the watch-only flag to be specified"`
 	RecoveryWindow    int32  `long:"recovery-window" description:"The address look-ahead used to scan for used keys when the wallet being initialized already has history; a value of zero, the default, means no addresses are recovered, which is what a brand new wallet wants"`
 }
 
@@ -202,8 +202,8 @@ func (x *initWalletCommand) Execute(_ []string) error {
 			// The accounts JSON file doesn't carry the birthday of
 			// the master key the accounts were derived from, so the
 			// operator has to tell us what it is. Without it lnd
-			// rescans the chain from the aezeed epoch, which on
-			// mainnet means walking hundreds of thousands of
+			// rescans the chain from the first SegWit block, which
+			// on mainnet means walking hundreds of thousands of
 			// blocks.
 			birthday, err := parseWatchOnlyBirthday(
 				x.InitRpc.WatchOnlyBirthday, x.Network,
@@ -215,7 +215,7 @@ func (x *initWalletCommand) Execute(_ []string) error {
 			if birthday == 0 {
 				logger.Warn("No wallet birthday specified, " +
 					"lnd will rescan the chain from the " +
-					"aezeed epoch (2017-08-24) which can " +
+					"first SegWit block (2017-08-24), which can " +
 					"take multiple hours; use " +
 					"--init-rpc.watch-only-birthday to " +
 					"start the rescan at the wallet's " +
