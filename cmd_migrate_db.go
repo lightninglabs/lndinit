@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	_ "net/http/pprof" // Register pprof handlers
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,6 +62,10 @@ const (
 	// walletReadyKey is the key in the wallet meta bucket for the wallet
 	// ready marker.
 	walletReadyKey = "ready"
+
+	// redactedDsn is what a database connection string is replaced with in
+	// a log line when we can't tell which of its parts are safe to show.
+	redactedDsn = "[redacted]"
 )
 
 // Bolt is the configuration for a bolt database.
@@ -719,7 +724,7 @@ func openDestDb(ctx context.Context, cfg *DestDB, prefix, network string,
 			MaxConnections: 10,
 		}
 		logger.Infof("Opening postgres backend at `%s` with prefix `%s`",
-			cfg.Postgres.Dsn, prefix)
+			redactDsn(cfg.Postgres.Dsn), prefix)
 
 		if bulkWrites {
 			return openPostgresBulkBackend(ctx, postgresCfg, prefix)
@@ -826,6 +831,99 @@ func openDestDb(ctx context.Context, cfg *DestDB, prefix, network string,
 	}
 
 	return &destinationBackend{Backend: db}, nil
+}
+
+// dsnLogAllowlist is the set of connection string parameters that are safe to
+// show in a log line. Everything else is dropped, so a parameter that carries a
+// secret can never end up in the logs, no matter which of the notations
+// postgres accepts it was given in.
+var dsnLogAllowlist = map[string]struct{}{
+	"host":             {},
+	"hostaddr":         {},
+	"port":             {},
+	"dbname":           {},
+	"user":             {},
+	"sslmode":          {},
+	"connect_timeout":  {},
+	"application_name": {},
+}
+
+// redactDsn strips the credentials out of a database connection string so it
+// can be logged. Rather than looking for the parameters that are known to be
+// sensitive, we keep only the ones that are known not to be, since a DSN that
+// we fail to fully understand must not leak a password. Both notations postgres
+// accepts are handled: the URL one (postgres://user:password@host:5432/dbname)
+// and the keyword/value one (host=... password=...).
+func redactDsn(dsn string) string {
+	if dsn == "" {
+		return ""
+	}
+
+	// The keyword/value notation has no scheme, which is what tells the two
+	// apart.
+	if !strings.Contains(dsn, "://") {
+		return redactKeywordValueDsn(dsn)
+	}
+
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		// We have no idea what we're holding, so nothing of it can be
+		// shown.
+		return redactedDsn
+	}
+
+	// Rebuild the URL from the parts that can't hold a secret. The password
+	// lives in the userinfo section, but can also be passed as a query
+	// parameter, which is why the whole query is filtered as well.
+	safe := &url.URL{
+		Scheme:   parsed.Scheme,
+		Host:     parsed.Host,
+		Path:     parsed.Path,
+		RawQuery: redactQuery(parsed.Query()),
+	}
+	if parsed.User != nil {
+		safe.User = url.User(parsed.User.Username())
+	}
+
+	return safe.String()
+}
+
+// redactQuery drops all query parameters of a DSN in URL notation that aren't
+// known to be free of secrets.
+func redactQuery(query url.Values) string {
+	safe := make(url.Values, len(query))
+	for key, values := range query {
+		if _, ok := dsnLogAllowlist[strings.ToLower(key)]; ok {
+			safe[key] = values
+		}
+	}
+
+	return safe.Encode()
+}
+
+// redactKeywordValueDsn drops all parameters of a DSN in keyword/value notation
+// that aren't known to be free of secrets. Values that are quoted because they
+// contain spaces are split into multiple fields by the naive tokenization used
+// here, but since we only ever keep allow-listed keys, such a fragment is
+// dropped rather than logged.
+func redactKeywordValueDsn(dsn string) string {
+	var safe []string
+	for _, field := range strings.Fields(dsn) {
+		key, _, found := strings.Cut(field, "=")
+		if !found {
+			continue
+		}
+
+		if _, ok := dsnLogAllowlist[strings.ToLower(key)]; ok {
+			safe = append(safe, field)
+		}
+	}
+
+	if len(safe) == 0 {
+		return redactedDsn
+	}
+
+	return strings.Join(safe, " ")
 }
 
 // checkMarkerPresent checks if a marker is present in the database.
