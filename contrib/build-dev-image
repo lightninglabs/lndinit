@@ -1,0 +1,495 @@
+#!/bin/bash
+
+# build-dev-image builds a development lndinit image from the CURRENT lndinit
+# worktree, layered on top of an lnd (or litd) base that is built from a
+# context you provide.
+#
+# You usually pass just the base (lnd/litd) build context; it defaults to
+# upstream lnd master (lightning-terminal master with --litd) if omitted.
+# lndinit itself is built from this worktree (the repo this script lives in) by
+# default, including any uncommitted changes, so you usually don't point at
+# lndinit explicitly (override with --lndinit-context).
+#
+# This is the local-dev twin of .github/workflows/docker.yml: that workflow
+# layers lndinit onto a *released* base on a `docker/v*` tag push; this script
+# lets you do the same manually against an unreleased base (a local checkout, a
+# branch, a fork, a PR, or a specific commit).
+#
+# Both dev.Dockerfiles rely on BuildKit cache mounts, so every build goes
+# through `docker buildx build`.
+#
+# Usage:
+#   contrib/build-dev-image [options] <base-context>
+#
+#   <base-context>   Build context for the base image: a local path (e.g.
+#                    ../lnd), a git URL with an optional #ref (branch, tag, or
+#                    commit), or a GitHub PR URL
+#                    (https://github.com/<owner>/<repo>/pull/<n>). Defaults to
+#                    upstream lnd master
+#                    (https://github.com/lightningnetwork/lnd.git#master), or
+#                    lightning-terminal master with --litd.
+#
+# Options:
+#   --litd                 Build on litd (lightning-terminal) instead of lnd:
+#                          selects the litd default context and --pr repo, and
+#                          names the base image litd-dev. A base context named
+#                          exactly lightning-terminal auto-selects litd; any
+#                          other name (even a litd checkout) needs --litd.
+#   --base-name NAME       Name (not including a tag) for the locally-built base image.
+#                          Default: lnd-dev (litd-dev with --litd).
+#   --base-tag TAG         Tag for the locally-built base image. Default for a
+#                          local checkout: <branch>-<short-commit> (plus
+#                          `-dirty` and a YYYYMMDDHHMMSS timestamp if tracked
+#                          files are modified — untracked-only trees don't
+#                          count; branch omitted on a detached HEAD). For
+#                          a git URL: the #ref (or "default" if the URL has no
+#                          #ref). For a non-git directory: "local".
+#   --base-image-ref REF   Skip building the base entirely and layer lndinit
+#                          onto this already-built or published base
+#                          (name:tag, split on the LAST colon so a registry
+#                          port like localhost:5000/lnd:dev is preserved).
+#                          Mutually exclusive with <base-context>.
+#   --pr N                 Build the default repo's GitHub PR N (lnd, or
+#                          lightning-terminal with --litd); tagged pr-N. The PR
+#                          head commit is resolved via `git ls-remote` (errors
+#                          clearly if #N is an issue or doesn't exist). Shorthand
+#                          for a PR URL as <base-context>; mutually exclusive
+#                          with <base-context>.
+#   --lndinit-context CTX  Build lndinit from CTX instead of this worktree
+#                          (a local path or a git URL with optional #ref).
+#   --name NAME            Output lndinit image name (not including a tag).
+#                          Default: lndinit.
+#   --tag TAG              Output lndinit image tag (not including a name). Default:
+#                          <base-name>-<base-tag> for a base build, or the base
+#                          ref's tag when --base-image-ref is used.
+#   --push                 docker push the final lndinit image (you must
+#                          already be `docker login`'d to the target registry).
+#   --push-only            Push an already-built image (<name>:<tag> from --name
+#                          / --tag) WITHOUT building; requires --tag. Cannot be
+#                          combined with a base context / --pr / --base-image-ref.
+#   --platform PLATFORM    buildx --platform (default: the build host's). A
+#                          multi-arch (comma-separated) value requires both
+#                          --base-image-ref and --push (a manifest list has no
+#                          single-arch local base and cannot be loaded locally).
+#   --dry-run              Print the buildx commands without running them.
+#   -h, --help             Show this help.
+#
+# Examples:
+#   # No args: lnd from upstream master + lndinit from this worktree:
+#   contrib/build-dev-image
+#
+#   # lnd from a local checkout:
+#   contrib/build-dev-image ../lnd
+#
+#   # lnd from an unreleased branch, pushed to a dev registry:
+#   contrib/build-dev-image --push --name my.registry/lndinit --tag dev \
+#       https://github.com/lightningnetwork/lnd.git#my-feature-branch
+#
+#   # A specific lnd PR (by number, or paste the PR URL):
+#   contrib/build-dev-image --pr 9500
+#   contrib/build-dev-image https://github.com/lightningnetwork/lnd/pull/9500
+#
+#   # litd base from a local checkout (a dir named exactly lightning-terminal
+#   # auto-selects litd; any other name needs --litd):
+#   contrib/build-dev-image ../lightning-terminal
+#
+#   # Skip the base build; layer this worktree's lndinit onto a published base:
+#   contrib/build-dev-image --base-image-ref lightninglabs/lnd:v0.21.0-beta
+#
+#   # Push an already-built image without rebuilding:
+#   contrib/build-dev-image --push-only --name my.registry/lndinit --tag dev
+
+set -euo pipefail
+
+# Container tool: honor CONTAINER_TOOL, else DOCKER,
+# else docker.
+TOOL="${CONTAINER_TOOL:-${DOCKER:-docker}}"
+
+# Resolve the directory this script lives in, following symlinks, so the
+# default lndinit context is the worktree it is part of no matter where it is
+# invoked from.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+REPO_ROOT="$(cd -P "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
+
+usage() { sed -n '3,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//'; }
+
+# print writes a highlighted status line.
+print() { printf '\033[0;32m%s\033[0m\n' "$1" >&2; }
+
+# run echoes a command, then runs it unless --dry-run is set.
+run() {
+  printf '+ ' >&2
+  printf '%q ' "$@" >&2
+  printf '\n' >&2
+  [ "$DRY_RUN" = yes ] && return 0
+  "$@"
+}
+
+# sanitize reduces an arbitrary string to a valid docker tag: any char outside
+# [A-Za-z0-9_.-] becomes '-', the result must
+# start with [A-Za-z0-9_], and is capped at 128 chars. If it is empty, the
+# optional $2 fallback is used ("" if not given).
+sanitize() {
+  local s
+  s="$(printf '%s' "$1" | tr -c 'A-Za-z0-9_.-' '-')"
+  # A docker tag may not start with '.' or '-'; drop any such leading chars.
+  while [ -n "$s" ]; do
+    case "$s" in
+      [!A-Za-z0-9_]*) s="${s#?}" ;;
+      *) break ;;
+    esac
+  done
+  s="${s:0:128}"
+  [ -z "$s" ] && s="${2-}"
+  printf '%s' "$s"
+}
+
+# derive_tag computes a default tag for a base context. It never fails: a
+# non-git directory, a bare repo, or a `git describe` that errors all fall
+# back to "local" rather than aborting the script under `set -e`.
+derive_tag() {
+  local ctx="$1" t="" top="" branch=""
+  if [ -d "$ctx" ]; then
+    # Only derive from git when the context dir is ITSELF the repo root;
+    # otherwise `git -C` would walk up and report an UNRELATED enclosing repo's
+    # commit for a plain source directory nested inside it.
+    top="$(git -C "$ctx" rev-parse --show-toplevel 2>/dev/null || true)"
+    if [ -n "$top" ] && [ "$top" -ef "$ctx" ]; then
+      t="$(git -C "$ctx" describe --always --dirty --match='__no_such_tag__' 2>/dev/null || true)"
+    fi
+    if [ -n "$t" ]; then
+      # A dirty tree appends a YYYYMMDDHHMMSS timestamp, so successive dirty
+      # builds at the same commit still get distinct tags rather than colliding
+      # on the bare hash.
+      if [ "${t%-dirty}" != "$t" ]; then t="${t}-$(date +%Y%m%d%H%M%S)"; fi
+      # Prefix the branch name for readability, e.g. my-branch-50c570279.
+      # Skipped on a detached HEAD, where `rev-parse --abbrev-ref HEAD`
+      # returns the literal "HEAD".
+      branch="$(git -C "$ctx" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+      # Cap the branch so the hash + dirty-timestamp suffix always survives the
+      # 128-char tag cap (truncating the suffix would defeat the timestamp).
+      [ "${#branch}" -gt 80 ] && branch="${branch:0:80}"
+      if [ -n "$branch" ] && [ "$branch" != HEAD ]; then t="${branch}-${t}"; fi
+      sanitize "$t" local
+    else
+      printf 'local'
+    fi
+  else
+    case "$ctx" in
+      *\#*) sanitize "${ctx##*\#}" default ;;
+      *)    printf 'default' ;;
+    esac
+  fi
+}
+
+# resolve_ctx sets RESOLVED_DF and RESOLVED_CTX for a context that is either a
+# local directory or a git URL. For a git URL the Dockerfile path is relative
+# to the cloned repo root, which is what buildx expects.
+resolve_ctx() {
+  local ctx="$1"
+  if [ -d "$ctx" ]; then
+    RESOLVED_DF="$ctx/dev.Dockerfile"
+    RESOLVED_CTX="$ctx"
+  else
+    # Not a directory: it must look like a git URL (scheme:// or scp-like
+    # host:path). A bare non-existent path is almost certainly a typo, not a
+    # context buildx can clone — fail clearly rather than hand it to buildx.
+    case "$ctx" in
+      *://*|*@*:*) : ;;
+      *) echo "context '$ctx' is not a directory and does not look like a git URL" >&2
+         exit 1 ;;
+    esac
+    RESOLVED_DF="dev.Dockerfile"
+    RESOLVED_CTX="$ctx"
+  fi
+}
+
+# need_val aborts with a clear error if a value-taking option is missing its
+# argument (it was the last token) or is followed by something that looks like
+# another flag (which would otherwise be silently swallowed as the value).
+# Call as: need_val <flag> "$#" "${2-}"
+need_val() {
+  if [ "$2" -lt 2 ] || [ -z "$3" ]; then
+    echo "option $1 requires a non-empty value" >&2
+    exit 2
+  fi
+  case "$3" in
+    -*) echo "option $1 requires a value (got '$3', which looks like a flag)" >&2
+        exit 2 ;;
+  esac
+}
+
+# Defaults.
+LITD=no
+BASE_NAME=""
+BASE_TAG=""
+BASE_IMAGE_REF=""
+LNDINIT_CTX="$REPO_ROOT"
+OUT_NAME=""
+OUT_TAG=""
+PUSH=no
+PUSH_ONLY=no
+PLATFORM=""
+DRY_RUN=no
+BASE_CONTEXT=""
+PR_NUM=""
+PR_REPO_URL=""
+LNDINIT_CTX_EXPLICIT=no
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --litd)            LITD=yes; shift ;;
+    --base-name)       need_val "$1" "$#" "${2-}"; BASE_NAME="$2"; shift 2 ;;
+    --base-tag)        need_val "$1" "$#" "${2-}"; BASE_TAG="$2"; shift 2 ;;
+    --base-image-ref)  need_val "$1" "$#" "${2-}"; BASE_IMAGE_REF="$2"; shift 2 ;;
+    --pr)              need_val "$1" "$#" "${2-}"; PR_NUM="$2"; shift 2 ;;
+    --lndinit-context) need_val "$1" "$#" "${2-}"; LNDINIT_CTX="$2"; LNDINIT_CTX_EXPLICIT=yes; shift 2 ;;
+    --name)            need_val "$1" "$#" "${2-}"; OUT_NAME="$2"; shift 2 ;;
+    --tag)             need_val "$1" "$#" "${2-}"; OUT_TAG="$2"; shift 2 ;;
+    --push)            PUSH=yes; shift ;;
+    --push-only)       PUSH_ONLY=yes; shift ;;
+    --platform)        need_val "$1" "$#" "${2-}"; PLATFORM="$2"; shift 2 ;;
+    --dry-run)         DRY_RUN=yes; shift ;;
+    -h|--help)         usage; exit 0 ;;
+    --)                shift; break ;;
+    -*)                echo "unknown option: $1" >&2; exit 2 ;;
+    *)
+      if [ -n "$BASE_CONTEXT" ]; then
+        echo "unexpected extra argument: $1" >&2; exit 2
+      fi
+      BASE_CONTEXT="$1"; shift ;;
+  esac
+done
+
+# A `--` separator leaves any remaining positionals in $@. Take the first as
+# the base context (if not already given) and reject extras — otherwise a
+# context passed after `--` would be silently dropped.
+while [ "$#" -gt 0 ]; do
+  if [ -n "$BASE_CONTEXT" ]; then
+    echo "unexpected extra argument: $1" >&2; exit 2
+  fi
+  BASE_CONTEXT="$1"; shift
+done
+
+# Resolve a PR into a git base context (GitHub only). Two forms:
+#   --pr N                         -> the default repo's (lnd/litd) PR N
+#   <base-context> = a PR web URL  -> that repo's PR N
+# Each sets PR_REPO_URL + PR_NUM; the shared step below resolves the PR head
+# commit via `git ls-remote` (failing clearly if #N is an issue or does not
+# exist) and pins the build to that SHA, tagged pr-N. GitHub mirrors fork PR
+# heads into the base repo's refs/pull/*, so this works for PRs from forks too.
+if [ -n "$PR_NUM" ]; then
+  case "$PR_NUM" in ''|0*|*[!0-9]*) echo "--pr requires a positive PR number, got '$PR_NUM'" >&2; exit 2 ;; esac
+  if [ -n "$BASE_IMAGE_REF" ]; then
+    echo "--pr and --base-image-ref are mutually exclusive" >&2; exit 2
+  fi
+  if [ -n "$BASE_CONTEXT" ]; then
+    echo "--pr and a base context are mutually exclusive" >&2; exit 2
+  fi
+  if [ "$LITD" = yes ]; then
+    PR_REPO_URL="https://github.com/lightninglabs/lightning-terminal.git"
+  else
+    PR_REPO_URL="https://github.com/lightningnetwork/lnd.git"
+  fi
+else
+  # A GitHub PR web URL: https://[www.]github.com/<owner>/<repo>/pull/<n>[/…][?…][#…].
+  # Match on the PATH only — strip ?query and #fragment first — so a web anchor
+  # (…/pull/5#issuecomment-…, …/pull/5/files#diff-…) does not divert it, and a
+  # git-context URL whose #ref merely contains /pull/ (…/lnd.git#refs/pull/7/head)
+  # is NOT misread as a PR (its /pull/ lives in the stripped fragment).
+  pr_path="${BASE_CONTEXT%%\?*}"; pr_path="${pr_path%%#*}"
+  case "$pr_path" in
+    http://github.com/*/pull/[0-9]*|https://github.com/*/pull/[0-9]*|http://www.github.com/*/pull/[0-9]*|https://www.github.com/*/pull/[0-9]*)
+      pr_rest="${pr_path#*://}"; pr_rest="${pr_rest#*github.com/}"
+      pr_owner="${pr_rest%%/*}"; pr_rest="${pr_rest#*/}"
+      pr_repo="${pr_rest%%/*}";  pr_rest="${pr_rest#*/}"
+      case "$pr_rest" in pull/[0-9]*) ;; *) echo "could not parse a PR URL from '$BASE_CONTEXT'" >&2; exit 2 ;; esac
+      pr_n="${pr_rest#pull/}"; pr_n="${pr_n%%/*}"
+      case "$pr_n" in ''|0*|*[!0-9]*) echo "not a positive PR number in '$BASE_CONTEXT'" >&2; exit 2 ;; esac
+      if [ -z "$pr_owner" ] || [ -z "$pr_repo" ]; then
+        echo "could not parse owner/repo from '$BASE_CONTEXT'" >&2; exit 2
+      fi
+      PR_NUM="$pr_n"
+      PR_REPO_URL="https://github.com/${pr_owner}/${pr_repo}.git"
+      ;;
+  esac
+fi
+
+# The lndinit context must contain a dev.Dockerfile. For the default (this
+# worktree) this catches a script that was moved out of the repo.
+resolve_ctx "$LNDINIT_CTX"
+LNDINIT_DF="$RESOLVED_DF"
+LNDINIT_BUILD_CTX="$RESOLVED_CTX"
+if [ -d "$LNDINIT_CTX" ] && [ ! -f "$LNDINIT_DF" ]; then
+  echo "no dev.Dockerfile in lndinit context '$LNDINIT_CTX'" >&2
+  if [ "$LNDINIT_CTX_EXPLICIT" = yes ]; then
+    echo "(--lndinit-context must point at an lndinit checkout containing dev.Dockerfile)" >&2
+  else
+    echo "(run this script from within the lndinit repo, or pass --lndinit-context)" >&2
+  fi
+  exit 1
+fi
+
+# A multi-arch image is a manifest list: it cannot be --load'ed into the local
+# docker store, and the intermediate base must be single-arch for the layering
+# FROM. So multi-arch requires BOTH a prebuilt --base-image-ref (no local base
+# build) AND --push (the only output for a manifest list). Reject early rather
+# than fail cryptically mid-build.
+if [ "$PUSH_ONLY" = no ] && [ -n "$PLATFORM" ] && [[ "$PLATFORM" == *,* ]]; then
+  if [ -z "$BASE_IMAGE_REF" ]; then
+    echo "--platform with multiple arches needs a prebuilt --base-image-ref" >&2
+    echo "(the locally-built base must be single-arch to layer lndinit on it)" >&2
+    exit 1
+  fi
+  if [ "$PUSH" != yes ]; then
+    echo "--platform with multiple arches requires --push" >&2
+    echo "(a multi-arch image is a manifest list and cannot be loaded locally)" >&2
+    exit 1
+  fi
+fi
+
+PLATFORM_ARGS=()
+[ -n "$PLATFORM" ] && PLATFORM_ARGS=(--platform "$PLATFORM")
+
+# --push-only: push an already-built image (name:tag from --name/--tag) without
+# building anything. Mutually exclusive with any build input.
+if [ "$PUSH_ONLY" = yes ]; then
+  if [ -n "$BASE_CONTEXT" ] || [ -n "$BASE_IMAGE_REF" ] || [ -n "$PR_NUM" ]; then
+    echo "--push-only pushes an existing image and does not build; drop the base context / --pr / --base-image-ref" >&2
+    exit 2
+  fi
+  if [ -z "$OUT_TAG" ]; then
+    echo "--push-only requires --tag (the tag of the image to push)" >&2
+    exit 2
+  fi
+  [ -z "$OUT_NAME" ] && OUT_NAME="lndinit"
+  OUT_IMAGE="${OUT_NAME}:${OUT_TAG}"
+  print "Pushing ${OUT_IMAGE} (no build)."
+  run "$TOOL" push "$OUT_IMAGE"
+  exit 0
+fi
+
+# For a PR build, resolve the head commit via `git ls-remote` (GitHub advertises
+# refs/pull/N/head), with prompts disabled so a private or mistyped repo fails
+# fast instead of blocking. This runs AFTER the --push-only / multi-arch guards
+# and skips when --base-image-ref is set, so a rejected invocation never makes a
+# needless network call. It fails clearly when #N is an issue or does not exist,
+# and pins the build to the SHA so it does not depend on buildx being able to
+# fetch a refs/pull/* ref directly.
+if [ -n "$PR_NUM" ] && [ -n "$PR_REPO_URL" ] && [ -z "$BASE_IMAGE_REF" ]; then
+  # Capture stdout+stderr together: on success ls-remote prints only the ref
+  # line to stdout, so the SHA extraction is unaffected; on failure pr_out holds
+  # git's own error (auth, network, bad repo), which is surfaced below.
+  if pr_out="$(GIT_TERMINAL_PROMPT=0 git ls-remote "$PR_REPO_URL" "refs/pull/${PR_NUM}/head" 2>&1)"; then
+    pr_sha="${pr_out%%$'\t'*}"
+    if [ -z "$pr_sha" ]; then
+      echo "no PR #${PR_NUM} in ${PR_REPO_URL} — issues and PRs share numbers, so #${PR_NUM} may be an issue (or the PR does not exist)" >&2
+      exit 2
+    fi
+    BASE_CONTEXT="${PR_REPO_URL}#${pr_sha}"
+  else
+    echo "could not resolve PR #${PR_NUM} from ${PR_REPO_URL}:" >&2
+    printf '%s\n' "$pr_out" >&2
+    exit 2
+  fi
+fi
+
+if [ -n "$BASE_IMAGE_REF" ]; then
+  # Layer onto an existing/published base: no base build.
+  if [ -n "$BASE_CONTEXT" ]; then
+    echo "--base-image-ref and a base context are mutually exclusive" >&2
+    exit 2
+  fi
+  # Split on the LAST colon so a registry port survives in the name half.
+  BASE_IMAGE="${BASE_IMAGE_REF%:*}"
+  BASE_IMAGE_VERSION="${BASE_IMAGE_REF##*:}"
+  # Validate [registry[:port]/]name:tag. Mirroring the lnd Makefile's HAS_TAG
+  # guard, there must be a colon whose post-last-colon part has no `/` (a `/`
+  # there means the colon is a registry port, not a tag). Also reject an empty
+  # name or tag (e.g. `lnd:` / `:v1`) and a stray colon left in the name half
+  # after an optional registry[:port]/ prefix (e.g. `lnd::v1`, `a:b:c`) — all of
+  # which would build an invalid FROM.
+  has_tag=no
+  case "$BASE_IMAGE_REF" in
+    *:*) case "$BASE_IMAGE_VERSION" in */*) has_tag=no ;; *) has_tag=yes ;; esac ;;
+  esac
+  name_rest="$BASE_IMAGE"
+  case "$name_rest" in */*) name_rest="${name_rest#*/}" ;; esac
+  name_ok=yes
+  case "$name_rest" in *:*) name_ok=no ;; esac
+  if [ "$has_tag" != yes ] || [ "$name_ok" != yes ] || [ -z "$BASE_IMAGE" ] || [ -z "$BASE_IMAGE_VERSION" ]; then
+    echo "--base-image-ref '$BASE_IMAGE_REF' is not a valid [registry[:port]/]name:tag reference" >&2
+    exit 2
+  fi
+  [ -z "$OUT_TAG" ] && OUT_TAG="$(sanitize "$BASE_IMAGE_VERSION" latest)"
+else
+  # Build the base from the provided context, defaulting to upstream master
+  # (lnd, or lightning-terminal with --litd) when none is given. In bash the
+  # `#ref` needs no escaping.
+  if [ -z "$BASE_CONTEXT" ]; then
+    if [ "$LITD" = yes ]; then
+      BASE_CONTEXT="https://github.com/lightninglabs/lightning-terminal.git#master"
+    else
+      BASE_CONTEXT="https://github.com/lightningnetwork/lnd.git#master"
+    fi
+  fi
+  # If the base context's repo is lightning-terminal and neither --litd nor
+  # --base-name was given, treat it as litd (name it litd-dev). Match the repo
+  # basename precisely, NOT a loose substring — an lnd branch such as
+  # add-lightning-terminal-support must not be misread as litd.
+  if [ "$LITD" = no ] && [ -z "$BASE_NAME" ]; then
+    ctx_repo="${BASE_CONTEXT%%#*}"; ctx_repo="${ctx_repo%.git}"
+    ctx_repo="${ctx_repo%/}"; ctx_repo="${ctx_repo##*/}"
+    [ "$ctx_repo" = lightning-terminal ] && LITD=yes
+  fi
+  [ -z "$BASE_NAME" ] && { [ "$LITD" = yes ] && BASE_NAME="litd-dev" || BASE_NAME="lnd-dev"; }
+  if [ -z "$BASE_TAG" ]; then
+    if [ -n "$PR_NUM" ]; then BASE_TAG="pr-${PR_NUM}"; else BASE_TAG="$(derive_tag "$BASE_CONTEXT")"; fi
+  fi
+  BASE_IMAGE="$BASE_NAME"
+  BASE_IMAGE_VERSION="$BASE_TAG"
+  # Sanitize: BASE_NAME may be registry/-qualified (contain `/` or `:`), which
+  # is invalid in a tag; fold the composed default to a valid tag fragment. The
+  # fallback is itself sanitized (with a `latest` backstop) so it can never be an
+  # invalid tag either.
+  [ -z "$OUT_TAG" ] && OUT_TAG="$(sanitize "${BASE_NAME}-${BASE_TAG}" "$(sanitize "$BASE_TAG" latest)")"
+
+  resolve_ctx "$BASE_CONTEXT"
+  if [ -d "$BASE_CONTEXT" ] && [ ! -f "$RESOLVED_DF" ]; then
+    echo "no dev.Dockerfile in base context '$BASE_CONTEXT'" >&2
+    exit 1
+  fi
+  print "Building base image ${BASE_IMAGE}:${BASE_IMAGE_VERSION} from ${BASE_CONTEXT}."
+  run "$TOOL" buildx build "${PLATFORM_ARGS[@]+"${PLATFORM_ARGS[@]}"}" --load \
+    -t "${BASE_IMAGE}:${BASE_IMAGE_VERSION}" \
+    -f "$RESOLVED_DF" "$RESOLVED_CTX"
+fi
+
+# Compose the output image from its name (default lndinit) and tag (defaulted
+# above from the base).
+[ -z "$OUT_NAME" ] && OUT_NAME="lndinit"
+OUT_IMAGE="${OUT_NAME}:${OUT_TAG}"
+
+# Build lndinit from its context (this worktree by default), layered on the
+# base above via lndinit's own dev.Dockerfile.
+OUTPUT_ARG=(--load)
+[ "$PUSH" = yes ] && OUTPUT_ARG=(--push)
+
+print "Building lndinit image ${OUT_IMAGE} on ${BASE_IMAGE}:${BASE_IMAGE_VERSION} (lndinit from ${LNDINIT_CTX})."
+run "$TOOL" buildx build "${PLATFORM_ARGS[@]+"${PLATFORM_ARGS[@]}"}" "${OUTPUT_ARG[@]}" \
+  --build-arg BASE_IMAGE="$BASE_IMAGE" \
+  --build-arg BASE_IMAGE_VERSION="$BASE_IMAGE_VERSION" \
+  -t "$OUT_IMAGE" \
+  -f "$LNDINIT_DF" "$LNDINIT_BUILD_CTX"
+
+if [ "$PUSH" = yes ]; then
+  print "Built and pushed ${OUT_IMAGE}."
+else
+  print "Built ${OUT_IMAGE} (local). Pass --push to publish it."
+fi
