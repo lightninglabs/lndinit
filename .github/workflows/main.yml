@@ -25,7 +25,7 @@ jobs:
   ########################
   lint:
     name: lint code
-    runs-on: [self-hosted]
+    runs-on: ubuntu-latest
     steps:
       - name: git checkout
         uses: actions/checkout@v2
@@ -40,7 +40,7 @@ jobs:
   ########################
   unit-test:
     name: run unit tests
-    runs-on: [self-hosted]
+    runs-on: ubuntu-latest
     steps:
       - name: git checkout
         uses: actions/checkout@v2
