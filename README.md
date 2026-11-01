@@ -25,7 +25,7 @@ initialization, including seed and password generation.
 Most commands of this tool operate independently of `lnd` and therefore don't
 require a specific version to be installed.
 
-The commands `wait-ready` and `init-wallet` only work with `lnd v0.14.2-beta`
+The commands `wait-ready` and `init-wallet` only work with `lnd v0.14.2-beta or later`
 and later though.
 
 A recent version of Kubernetes is needed when interacting with secrets stored in
@@ -197,7 +197,7 @@ spec:
           # The lndinit image is an image based on the main lnd image that just
           # adds the lndinit binary to it. The tag name is simply:
           #   <lndinit-version>-lnd-<lnd-version>
-          image: lightninglabs/lndinit:v0.1.0-lnd-v0.14.2-beta
+          image: lightninglabs/lndinit:v0.1.0-lnd-v0.14.2-beta or later
           env:
             - name: WALLET_SECRET_NAME
               value: lnd-wallet-secret
