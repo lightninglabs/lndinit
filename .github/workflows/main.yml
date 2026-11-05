@@ -12,11 +12,10 @@ defaults:
   run:
     shell: bash
 
-env:
-  # go needs absolute directories, using the $HOME variable doesn't work here.
-  GOCACHE: /home/runner/work/go/pkg/build
-  GOPATH: /home/runner/work/go
+permissions:
+  contents: read
 
+env:
   GO_VERSION: 1.25.11
 
 jobs:
@@ -25,7 +24,7 @@ jobs:
   ########################
   lint:
     name: lint code
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm-8cpu]
     steps:
       - name: git checkout
         uses: actions/checkout@v2
@@ -40,7 +39,7 @@ jobs:
   ########################
   unit-test:
     name: run unit tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm-2cpu]
     steps:
       - name: git checkout
         uses: actions/checkout@v2

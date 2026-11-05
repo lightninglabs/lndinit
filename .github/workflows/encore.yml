@@ -1,0 +1,33 @@
+name: encore
+
+# A reclaimed self-hosted runner can stop mid-job. Inspect the completed run
+# from a separate, GitHub-hosted runner and retry failed jobs only when every
+# failure looks like infrastructure.
+#
+# Implementation and docs: https://github.com/lightninglabs/encore
+# This workflow takes effect only after it lands on main.
+on:
+  workflow_run:
+    workflows: ["CI", "Docker image build"]
+    types: [completed]
+
+permissions:
+  actions: write # rerun-failed-jobs
+  checks: read # read the annotations that identify a lost runner
+
+# A retry keeps the run ID, so include the attempt to allow subsequent retries
+# while serializing duplicate completion events for the same attempt.
+concurrency:
+  group: encore-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    # Human cancellations and runs superseded by newer pushes have conclusion
+    # cancelled. Restricting this to failure keeps those runs cancelled.
+    if: github.event.workflow_run.conclusion == 'failure'
+    # v1.0.0
+    uses: lightninglabs/encore/.github/workflows/retry.yml@7960058f2de75ea5565efb51a6f808e49a185bd2
+    with:
+      run_id: ${{ github.event.workflow_run.id }}
+      max_attempts: 3
