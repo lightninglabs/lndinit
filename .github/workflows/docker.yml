@@ -12,13 +12,16 @@ defaults:
   run:
     shell: bash
 
+permissions:
+  contents: read
+
 env:
   DOCKER_REPO: lightninglabs
   DOCKER_IMAGE: lndinit
 
 jobs:
   main:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm-8cpu]
     steps:
       - name: Set up QEMU
         uses: lightninglabs/gh-actions/setup-qemu-action@39555064b3ae5c6d5c71a8ab304355faeaf3f4d4
