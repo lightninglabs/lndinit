@@ -1,0 +1,6 @@
+{
+  "_comment": "Performance baseline the gate compares against: the numbers from the last green run on a final lnd release, copied with `run.sh baseline <result.json>` and reviewed in a PR. Empty until the first calibrated run; until then performance metrics are recorded only.",
+  "image_tag": null,
+  "recorded_at": null,
+  "performance": {}
+}

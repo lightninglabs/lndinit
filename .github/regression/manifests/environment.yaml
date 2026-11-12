@@ -1,0 +1,23 @@
+# Sandbox request for one regression run. Applied in the home namespace with
+# the CI identity; lightning-operator creates the namespace in spec.namespace,
+# binds the listed ClusterRoles to the runner ServiceAccount inside it and
+# deletes everything again when this object is deleted.
+apiVersion: config.lightning.engineering/v1alpha1
+kind: Environment
+metadata:
+  name: ${RUN_NAME}
+  namespace: ${HOME_NS}
+  labels:
+    lightning.engineering/image-tag: ${IMAGE_TAG}
+    lightning.engineering/kind: ${KIND}
+spec:
+  namespace: ${SANDBOX_NS}
+  serviceAccount: ${RUNNER_SA}
+  roles: ${ROLES_JSON}
+  # Self-imposed; the operator's --sandbox-default-quota is the enforced cap.
+  resourceQuota:
+    pods: "12"
+    count/bitcoinnodes.layer1.lightning.engineering: "1"
+    count/lndnodes.layer2.lightning.engineering: "3"
+    count/channels.layer2.lightning.engineering: "4"
+    count/paymentgenerators.layer2.lightning.engineering: "4"
