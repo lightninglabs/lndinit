@@ -22,6 +22,10 @@ env:
 jobs:
   main:
     runs-on: [self-hosted, linux, x64, vm-8cpu]
+    outputs:
+      image_tag: ${{ steps.export.outputs.image_tag }}
+      lnd_version: ${{ steps.export.outputs.lnd_version }}
+      base_image: ${{ steps.export.outputs.base_image }}
     steps:
       - name: Set up QEMU
         uses: lightninglabs/gh-actions/setup-qemu-action@39555064b3ae5c6d5c71a8ab304355faeaf3f4d4
@@ -77,3 +81,31 @@ jobs:
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
+
+      # Hand the published tag to the regression job. The daily build pushes
+      # two tags (the dated one and the rolling daily-testing-only); the dated
+      # one is exported so a run tests one image.
+      - name: Export image tag
+        id: export
+        run: |
+          echo "image_tag=${RELEASE_VERSION%%,*}" >> $GITHUB_OUTPUT
+          echo "lnd_version=${BASE_IMAGE_VERSION}" >> $GITHUB_OUTPUT
+          echo "base_image=${BASE_IMAGE}" >> $GITHUB_OUTPUT
+
+  # Soak the image just published on an operator-managed regtest network on
+  # the staging cluster and pass or fail with that run. Only lnd-based images
+  # are tested; litd tags are skipped. See regression.yml and
+  # .github/regression/README.md for the details and for starting a run by
+  # hand for an already published tag.
+  regression:
+    name: regression test
+    needs: main
+    if: needs.main.outputs.base_image == 'lightninglabs/lnd'
+    uses: ./.github/workflows/regression.yml
+    with:
+      image_tag: ${{ needs.main.outputs.image_tag }}
+      lnd_version: ${{ needs.main.outputs.lnd_version }}
+      kind: ${{ github.event_name == 'schedule' && 'nightly' || 'release' }}
+    # The cluster secrets are Environment secrets, which a called workflow
+    # can only receive this way.
+    secrets: inherit

@@ -1,0 +1,37 @@
+{
+  "_comment": "Load, timing and pass/fail limits for the lnd regression run. The job summary and result.json report the values applied. Performance limits are a percentage worse than baseline.json; a metric with no baseline is recorded, not judged.",
+  "warmupMinutes": 5,
+  "soakMinutes": 60,
+  "snapshotSeconds": 60,
+  "readyTimeoutMinutes": 30,
+  "bench": {
+    "payments": 1500,
+    "concurrency": 4,
+    "repetitions": 3,
+    "timeoutMinutes": 10
+  },
+  "functional": {
+    "maxPaymentFailurePct": 1.0,
+    "minPaymentsForFailureRate": 100,
+    "maxPaymentStallMinutes": 10,
+    "maxChainSyncLossMinutes": 2,
+    "maxPodRestarts": 0,
+    "maxPanics": 0
+  },
+  "performance": {
+    "release": {
+      "maxThroughputRegressionPct": 30,
+      "maxLatencyP95RegressionPct": 50,
+      "maxInvoiceP95RegressionPct": 50,
+      "maxStartupRegressionPct": 100,
+      "maxRssRegressionPct": 100
+    },
+    "nightly": {
+      "maxThroughputRegressionPct": 40,
+      "maxLatencyP95RegressionPct": 75,
+      "maxInvoiceP95RegressionPct": 75,
+      "maxStartupRegressionPct": 150,
+      "maxRssRegressionPct": 150
+    }
+  }
+}
