@@ -8,7 +8,7 @@
     "payments": 1500,
     "concurrency": 4,
     "repetitions": 3,
-    "timeoutMinutes": 20
+    "timeoutMinutes": 10
   },
   "functional": {
     "maxPaymentFailurePct": 1.0,

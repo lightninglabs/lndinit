@@ -5,7 +5,7 @@
 #
 #   cluster   write the CI kubeconfig from AWS credentials (CI only)
 #   setup     create the Environment, wait for Ready, mint the sandbox token
-#   scenario  apply the two-node network and wait until it is healthy
+#   scenario  apply the network manifest and wait until it is healthy
 #   bench     throughput benchmark, repeated, median kept
 #   soak      continuous load for SOAK_MINUTES with a snapshot every minute
 #   gate      judge the run, write result.json, exit 1 on a failure
@@ -34,7 +34,6 @@ phase=${1:-}
 # operator can only bind roles it ships). The bitcoind Secret and the pod
 # reads the runner also needs are bound outside the Environment; see README.md.
 : "${ENVIRONMENT_ROLES:=lightning-operator-layer1-bitcoinnode-admin-role,lightning-operator-layer2-lndnode-admin-role,lightning-operator-layer2-channel-admin-role,lightning-operator-layer2-paymentgenerator-admin-role}"
-: "${GRAFANA_URL:=}"
 : "${RUN_URL:=}"
 : "${WORKDIR:=$PWD/.regression-run}"
 : "${CI_KUBECONFIG:=${KUBECONFIG:-$HOME/.kube/config}}"
@@ -281,7 +280,10 @@ phase_bench() {
 		if [[ "$run_secs" =~ ^[0-9]+$ ]] && (( run_secs > 0 )); then
 			secs=$run_secs; clock=runner
 		fi
-		ks delete "$PAYMENTGENERATORS/$BENCH_NAME" --wait=false >/dev/null || true
+		# Wait for the delete: the sandbox quota counts generators, and a
+		# bench still terminating would block the next apply.
+		ks delete "$PAYMENTGENERATORS/$BENCH_NAME" --wait=true --timeout=120s >/dev/null ||
+			log "WARNING: $BENCH_NAME is still terminating"
 		jq -n --arg name "$BENCH_NAME" --arg phase "$phase" --argjson secs "$secs" \
 			--arg clock "$clock" --argjson total_secs "$(( t1 - t0 ))" \
 			--argjson payments "$payments" --argjson status "${status:-null}" \
@@ -529,7 +531,6 @@ phase_gate() {
 		--arg image "${IMAGE}:${IMAGE_TAG}" --arg image_tag "$IMAGE_TAG" \
 		--arg lnd_version "${LND_VERSION:-}" --arg kind "$KIND" --arg run_key "$RUN_NAME" \
 		--arg sandbox "$SANDBOX_NS" --arg run_url "$RUN_URL" \
-		--arg grafana "${GRAFANA_URL//\{namespace\}/$SANDBOX_NS}" \
 		--arg started "$(jq -r .applied_at "$WORKDIR/timings.json")" --arg finished "$(iso_now)" \
 		--argjson functional "$functional" --argjson performance "$performance" \
 		--argjson panics "$panics" \
@@ -601,7 +602,7 @@ phase_gate() {
 		  performance_vs_baseline: $perf_cmp,
 		  breached: $breached,
 		  skipped: $skipped,
-		  links: {run: $run_url, grafana: $grafana}
+		  links: {run: $run_url}
 		}')
 	echo "$result" > "$WORKDIR/result.json"
 	jq . "$WORKDIR/result.json"
@@ -656,7 +657,6 @@ phase_summary() {
 		echo "| Soak | $(jq -r .thresholds.soakMinutes "$r") min, warm-up $(jq -r .thresholds.warmupMinutes "$r") min |"
 		echo "| Baseline | $(jq -r '.baseline.image_tag // "none"' "$r") |"
 		echo "| Latency from | $(jq -r 'if .performance.latency_source == "runner" then "payment runner metrics" else "lnd exporter" end' "$r") |"
-		[[ -n "$(jq -r .links.grafana "$r")" ]] && echo "| Grafana | $(jq -r .links.grafana "$r") |"
 		echo
 		if [[ "$(jq '.breached | length' "$r")" != 0 ]]; then
 			echo "### Breached"

@@ -11,10 +11,11 @@ name: Regression test
 # Called from docker.yml after every lnd-based publish (release tags and the
 # nightly build) and startable by hand for a tag that is already on Docker Hub.
 #
-# Repository secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION and
-# EKS_CLUSTER_NAME (see .github/regression/README.md). docker.yml passes them
-# on under the same names; a workflow_dispatch run reads them directly.
-# Optional repository variable: LND_REGRESSION_GRAFANA_URL (see the README).
+# The cluster secrets (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
+# EKS_CLUSTER_NAME, see .github/regression/README.md) live in the "staging"
+# GitHub Environment, which only main and release tags may deploy to, so a
+# run started by hand from any other branch cannot reach them. docker.yml
+# passes them on with `secrets: inherit`.
 
 on:
   workflow_call:
@@ -31,15 +32,6 @@ on:
         description: "release or nightly"
         required: true
         type: string
-    secrets:
-      AWS_ACCESS_KEY_ID:
-        required: true
-      AWS_SECRET_ACCESS_KEY:
-        required: true
-      AWS_REGION:
-        required: true
-      EKS_CLUSTER_NAME:
-        required: true
   workflow_dispatch:
     inputs:
       image_tag:
@@ -63,14 +55,17 @@ permissions:
 
 env:
   IMAGE: lightninglabs/lndinit
-  GRAFANA_URL: ${{ vars.LND_REGRESSION_GRAFANA_URL }}
   WORKDIR: ${{ github.workspace }}/.regression-run
 
 jobs:
   regression:
     name: regression test
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    # Holds the cluster secrets; its deployment branch policy limits runs
+    # to main and release tags.
+    environment: staging
+    # Phase timeouts in the scripts add up to under this, teardown included.
+    timeout-minutes: 180
     # One run per image tag at a time; a second request for the same tag
     # queues behind the first instead of starting a second environment on
     # staging. Job-level so it holds for both workflow_call and
@@ -91,6 +86,10 @@ jobs:
           KIND: ${{ inputs.kind }}
           SOAK_MINUTES: ${{ inputs.soak_minutes }}
         run: |
+          if [[ ! "${IMAGE_TAG}" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+            echo "::error::image_tag must match ^[A-Za-z0-9_.-]+\$, got '${IMAGE_TAG}'"
+            exit 1
+          fi
           if [[ -z "${KIND}" ]]; then
             if [[ "${IMAGE_TAG}" == daily-testing-* ]]; then
               KIND=nightly

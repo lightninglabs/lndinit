@@ -20,4 +20,4 @@ spec:
     count/bitcoinnodes.layer1.lightning.engineering: "1"
     count/lndnodes.layer2.lightning.engineering: "3"
     count/channels.layer2.lightning.engineering: "4"
-    count/paymentgenerators.layer2.lightning.engineering: "4"
+    count/paymentgenerators.layer2.lightning.engineering: "6"

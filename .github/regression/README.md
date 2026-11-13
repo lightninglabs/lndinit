@@ -76,6 +76,9 @@ ServiceMonitors carry the label the cluster's metrics agent selects on.
 For a tag that is already on Docker Hub: Actions, "Regression test", "Run
 workflow", enter the tag (`v0.1.38-beta-lnd-v0.21.6-beta` or
 `daily-testing-20261104`). `soak_minutes` shortens the soak for a smoke run.
+Start it from `main`: the cluster secrets live in the `staging` GitHub
+Environment, and only `main` and release tags may use it, so a run from any
+other branch fails at the environment check before anything runs.
 
 Against any cluster with a kubeconfig that can manage Environments in the
 home namespace:
@@ -124,12 +127,13 @@ Set up once on the cluster, outside this repository.
    user with a binding in `lnd-regression` allowing
    `environments.config.lightning.engineering` (get, list, watch, create,
    update, patch, delete), `serviceaccounts` get and `serviceaccounts/token`
-   create on `lnd-regression-runner`. Its keys are the repository secrets
-   `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`; the repository secrets
-   `AWS_REGION` and `EKS_CLUSTER_NAME` name the cluster (masked in logs).
-   The job never holds any other cluster
-   credential; inside the sandbox it acts as the runner ServiceAccount
-   through a four-hour token.
+   create on `lnd-regression-runner`. Its keys are the secrets
+   `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, next to `AWS_REGION` and
+   `EKS_CLUSTER_NAME` naming the cluster, all four in the `staging` GitHub
+   Environment whose deployment branch policy allows only `main` and
+   `docker/v*` tags. Being secrets, region and cluster name are masked in
+   logs. The job never holds any other cluster credential; inside the
+   sandbox it acts as the runner ServiceAccount through a four-hour token.
 5. **Nodes.** Sandbox pods cannot carry tolerations (operator admission
    policy), so they need untainted nodes; staging's general node groups
    are.
@@ -137,6 +141,3 @@ Set up once on the cluster, outside this repository.
    there older than three hours, for runs whose GitHub runner was lost
    before its own teardown step ran. The namespace is dedicated to these
    runs, so an Environment created by hand for debugging goes the same way.
-7. **Optional.** The repository variable `LND_REGRESSION_GRAFANA_URL` with
-   `{namespace}` in it is rendered into the summary as a link to the run's
-   dashboards.

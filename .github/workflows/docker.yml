@@ -106,8 +106,6 @@ jobs:
       image_tag: ${{ needs.main.outputs.image_tag }}
       lnd_version: ${{ needs.main.outputs.lnd_version }}
       kind: ${{ github.event_name == 'schedule' && 'nightly' || 'release' }}
-    secrets:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_REGION: ${{ secrets.AWS_REGION }}
-      EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+    # The cluster secrets are Environment secrets, which a called workflow
+    # can only receive this way.
+    secrets: inherit
