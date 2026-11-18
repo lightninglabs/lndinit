@@ -1,0 +1,172 @@
+name: Regression test
+
+# Runs a published lightninglabs/lndinit image through the lnd regression
+# test: an operator-managed regtest network in a fresh sandbox namespace on
+# the staging EKS cluster, a throughput benchmark, an hour of continuous
+# payment load, then a functional and performance gate. The sandbox is created
+# and deleted through lightning-operator's Environment CRD. Everything runs in
+# this workflow; the scripts under .github/regression/ do the work and can be
+# run by hand against any kubeconfig.
+#
+# Called from docker.yml after every lnd-based publish (release tags and the
+# nightly build) and startable by hand for a tag that is already on Docker Hub.
+#
+# The cluster secrets (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
+# EKS_CLUSTER_NAME, see .github/regression/README.md) live in the "staging"
+# GitHub Environment, which only main and release tags may deploy to, so a
+# run started by hand from any other branch cannot reach them. docker.yml
+# passes them on with `secrets: inherit`.
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "lightninglabs/lndinit tag to test"
+        required: true
+        type: string
+      lnd_version:
+        description: "lnd version the tag was built on, e.g. v0.21.6-beta"
+        required: true
+        type: string
+      kind:
+        description: "release or nightly"
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: >-
+          Published lightninglabs/lndinit tag to test, e.g.
+          v0.1.38-beta-lnd-v0.21.6-beta or daily-testing-20261104
+        required: true
+        type: string
+      soak_minutes:
+        description: "Soak length in minutes (default from thresholds.json, 60)"
+        required: false
+        type: string
+        default: ""
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: lightninglabs/lndinit
+  WORKDIR: ${{ github.workspace }}/.regression-run
+
+jobs:
+  regression:
+    name: regression test
+    runs-on: ubuntu-latest
+    # Holds the cluster secrets; its deployment branch policy limits runs
+    # to main and release tags.
+    environment: staging
+    # Phase timeouts in the scripts add up to under this, teardown included.
+    timeout-minutes: 180
+    # One run per image tag at a time; a second request for the same tag
+    # queues behind the first instead of starting a second environment on
+    # staging. Job-level so it holds for both workflow_call and
+    # workflow_dispatch.
+    concurrency:
+      group: regression-${{ inputs.image_tag }}
+      cancel-in-progress: false
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # workflow_call passes lnd_version and kind; workflow_dispatch only has
+      # the tag, so derive the other two from it the same way docker.yml does.
+      - name: Resolve inputs
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          LND_VERSION: ${{ inputs.lnd_version }}
+          KIND: ${{ inputs.kind }}
+          SOAK_MINUTES: ${{ inputs.soak_minutes }}
+        run: |
+          if [[ ! "${IMAGE_TAG}" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+            echo "::error::image_tag must match ^[A-Za-z0-9_.-]+\$, got '${IMAGE_TAG}'"
+            exit 1
+          fi
+          if [[ -z "${KIND}" ]]; then
+            if [[ "${IMAGE_TAG}" == daily-testing-* ]]; then
+              KIND=nightly
+              LND_VERSION=daily-testing-only
+            elif [[ "${IMAGE_TAG}" == *-lnd-* ]]; then
+              KIND=release
+              LND_VERSION="${IMAGE_TAG##*-lnd-}"
+            else
+              echo "::error::unsupported tag '${IMAGE_TAG}': only -lnd- and daily-testing-* tags are tested"
+              exit 1
+            fi
+          fi
+          if [[ -n "${SOAK_MINUTES}" && ! "${SOAK_MINUTES}" =~ ^[0-9]+$ ]]; then
+            echo "::error::soak_minutes must be a whole number of minutes, got '${SOAK_MINUTES}'"
+            exit 1
+          fi
+          run_name="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          {
+            echo "IMAGE_TAG=${IMAGE_TAG}"
+            echo "LND_VERSION=${LND_VERSION}"
+            echo "KIND=${KIND}"
+            echo "RUN_NAME=${run_name}"
+            echo "RUN_URL=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } >> "$GITHUB_ENV"
+          echo "Testing ${IMAGE}:${IMAGE_TAG} (${KIND}, lnd ${LND_VERSION}) as ${run_name}"
+
+      # Static keys of the regression IAM identity. The action exports them
+      # into the job environment, so every later step, the teardown included,
+      # reaches the cluster through the kubeconfig's aws exec plugin.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          mask-aws-account-id: true
+
+      - name: Cluster access
+        env:
+          EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+        run: .github/regression/run.sh cluster
+
+      - name: Create sandbox (Environment)
+        run: .github/regression/run.sh setup
+
+      - name: Deploy scenario and wait for readiness
+        run: .github/regression/run.sh scenario
+
+      - name: Throughput benchmark
+        run: .github/regression/run.sh bench
+
+      - name: Soak
+        env:
+          SOAK_MINUTES: ${{ inputs.soak_minutes }}
+        run: .github/regression/run.sh soak
+
+      - name: Gate
+        run: .github/regression/run.sh gate
+
+      - name: Delete sandbox
+        if: always()
+        run: .github/regression/run.sh teardown
+
+      - name: Job summary
+        if: always()
+        run: .github/regression/run.sh summary
+
+      - name: Upload run artifacts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lnd-regression-${{ env.IMAGE_TAG }}
+          path: |
+            ${{ env.WORKDIR }}/result.json
+            ${{ env.WORKDIR }}/timings.json
+            ${{ env.WORKDIR }}/bench.json
+            ${{ env.WORKDIR }}/snapshots.jsonl
+            ${{ env.WORKDIR }}/metrics/
+          retention-days: 90
+          if-no-files-found: ignore

@@ -1,0 +1,285 @@
+# Three-node regtest network for the regression run, applied into the sandbox
+# namespace as the runner ServiceAccount. Every lnd node runs the image under
+# test, each on a different database: alice on SQLite with native SQL, bob on
+# bbolt, carol on SQLite through kvdb. Channels form the line alice - bob -
+# carol, so the alice-carol generator's payments are forwarded by bob in both
+# directions. A Postgres node (CloudNativePG) is planned but not part of the
+# first version.
+#
+# Placeholders in braces are substituted by run.sh. Tolerations are not
+# allowed in Environment sandboxes by the operator's admission policy.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bitcoind-rpc-creds
+  namespace: ${SANDBOX_NS}
+type: Opaque
+stringData:
+  rpcuser: regression
+  rpcpassword: ${BITCOIND_RPC_PASSWORD}
+---
+apiVersion: layer1.lightning.engineering/v1alpha1
+kind: BitcoinNode
+metadata:
+  name: bitcoind
+  namespace: ${SANDBOX_NS}
+spec:
+  network: regtest
+  rpcUserFrom:
+    name: bitcoind-rpc-creds
+    key: rpcuser
+  rpcPasswordFrom:
+    name: bitcoind-rpc-creds
+    key: rpcpassword
+  miningEnabled: true
+  mining:
+    # Same cadence as the other staging networks so channel open times are
+    # comparable.
+    blockInterval: "30s"
+    initialBlocks: 200
+  storageSize: "5Gi"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+---
+apiVersion: layer2.lightning.engineering/v1alpha1
+kind: LNDNode
+metadata:
+  name: alice
+  namespace: ${SANDBOX_NS}
+spec:
+  image: ${IMAGE}:${IMAGE_TAG}
+  storageSize: "2Gi"
+  bitcoinBackend:
+    kind: BitcoinNode
+    name: bitcoind
+  database:
+    backend: sqlite
+    useNativeSQL: true
+  walletBalancePolicy:
+    minimumBalanceSats: 100000000
+    fundingSource: bitcoind
+    topUpAmountSats: 100000000
+  # Requests equal limits (Guaranteed QoS) so timings are comparable between
+  # runs. Numbers are a starting point for calibration.
+  resources:
+    requests:
+      cpu: "1"
+      memory: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+  lndConfig:
+    overrides:
+      # Channels open in both directions between the same pair at once,
+      # and lnd's default allows one pending channel per peer.
+      maxpendingchannels: "10"
+    # lnd's own exporter: gRPC handling-time histograms give payment latency
+    # (SendPaymentV2) and the invoice write path (AddInvoice); process
+    # metrics give memory. Read by the gate through the apiserver pod proxy.
+    prometheus:
+      enable: "true"
+      listen: "0.0.0.0:8989"
+      perfhistograms: "true"
+  lndmon:
+    enabled: true
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+    serviceMonitor:
+      labels:
+        # The cluster's metrics agent scrapes only ServiceMonitors with this
+        # label; it puts the run on the dashboards (filter by namespace) and
+        # feeds startup time (lnd_time_to_*_millisecs).
+        instance: primary
+---
+apiVersion: layer2.lightning.engineering/v1alpha1
+kind: LNDNode
+metadata:
+  name: bob
+  namespace: ${SANDBOX_NS}
+spec:
+  image: ${IMAGE}:${IMAGE_TAG}
+  storageSize: "2Gi"
+  bitcoinBackend:
+    kind: BitcoinNode
+    name: bitcoind
+  database:
+    backend: bolt
+  walletBalancePolicy:
+    minimumBalanceSats: 100000000
+    fundingSource: bitcoind
+    topUpAmountSats: 100000000
+  resources:
+    requests:
+      cpu: "1"
+      memory: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+  lndConfig:
+    overrides:
+      # Channels open in both directions between the same pair at once,
+      # and lnd's default allows one pending channel per peer.
+      maxpendingchannels: "10"
+    prometheus:
+      enable: "true"
+      listen: "0.0.0.0:8989"
+      perfhistograms: "true"
+  lndmon:
+    enabled: true
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+    serviceMonitor:
+      labels:
+        instance: primary
+---
+apiVersion: layer2.lightning.engineering/v1alpha1
+kind: LNDNode
+metadata:
+  name: carol
+  namespace: ${SANDBOX_NS}
+spec:
+  image: ${IMAGE}:${IMAGE_TAG}
+  storageSize: "2Gi"
+  bitcoinBackend:
+    kind: BitcoinNode
+    name: bitcoind
+  database:
+    backend: sqlite
+  walletBalancePolicy:
+    minimumBalanceSats: 100000000
+    fundingSource: bitcoind
+    topUpAmountSats: 100000000
+  resources:
+    requests:
+      cpu: "1"
+      memory: "1Gi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+  lndConfig:
+    overrides:
+      # Channels open in both directions between the same pair at once,
+      # and lnd's default allows one pending channel per peer.
+      maxpendingchannels: "10"
+    prometheus:
+      enable: "true"
+      listen: "0.0.0.0:8989"
+      perfhistograms: "true"
+  lndmon:
+    enabled: true
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+    serviceMonitor:
+      labels:
+        instance: primary
+---
+apiVersion: layer2.lightning.engineering/v1alpha1
+kind: Channel
+metadata:
+  name: alice-bob
+  namespace: ${SANDBOX_NS}
+spec:
+  initiator: alice
+  peer: bob
+  capacity: 2000000
+  pushAmt: 1000000
+---
+apiVersion: layer2.lightning.engineering/v1alpha1
+kind: Channel
+metadata:
+  name: bob-alice
+  namespace: ${SANDBOX_NS}
+spec:
+  initiator: bob
+  peer: alice
+  capacity: 2000000
+  pushAmt: 1000000
+---
+apiVersion: layer2.lightning.engineering/v1alpha1
+kind: Channel
+metadata:
+  name: bob-carol
+  namespace: ${SANDBOX_NS}
+spec:
+  initiator: bob
+  peer: carol
+  capacity: 2000000
+  pushAmt: 1000000
+---
+apiVersion: layer2.lightning.engineering/v1alpha1
+kind: Channel
+metadata:
+  name: carol-bob
+  namespace: ${SANDBOX_NS}
+spec:
+  initiator: carol
+  peer: bob
+  capacity: 2000000
+  pushAmt: 1000000
+---
+# Continuous load for the whole soak, two generators: direct payments
+# between alice and bob, and payments between alice and carol that bob
+# forwards. Three workers each, about one payment a second per generator
+# (intervalMs is a per-worker delay between sequential payments, so latency
+# adds to it).
+apiVersion: layer2.lightning.engineering/v1alpha1
+kind: PaymentGenerator
+metadata:
+  name: soak
+  namespace: ${SANDBOX_NS}
+spec:
+  nodeA: alice
+  nodeB: bob
+  bidirectional: true
+  amountSats: 1000
+  intervalMs: 1000
+  concurrency: 3
+  mode: continuous
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "500m"
+      memory: "128Mi"
+---
+apiVersion: layer2.lightning.engineering/v1alpha1
+kind: PaymentGenerator
+metadata:
+  name: soak-forward
+  namespace: ${SANDBOX_NS}
+spec:
+  nodeA: alice
+  nodeB: carol
+  bidirectional: true
+  amountSats: 1000
+  intervalMs: 1000
+  concurrency: 3
+  mode: continuous
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "500m"
+      memory: "128Mi"

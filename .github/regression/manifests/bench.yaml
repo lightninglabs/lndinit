@@ -1,0 +1,24 @@
+# One throughput benchmark: a batch generator that sends BENCH_PAYMENTS
+# payments with no delay between them. run.sh times it by its runner
+# container's lifetime and applies it repeatedly with a fresh BENCH_NAME.
+apiVersion: layer2.lightning.engineering/v1alpha1
+kind: PaymentGenerator
+metadata:
+  name: ${BENCH_NAME}
+  namespace: ${SANDBOX_NS}
+spec:
+  nodeA: alice
+  nodeB: bob
+  bidirectional: true
+  amountSats: 1000
+  intervalMs: 0
+  concurrency: ${BENCH_CONCURRENCY}
+  mode: batch
+  maxPayments: ${BENCH_PAYMENTS}
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "64Mi"
+    limits:
+      cpu: "1"
+      memory: "128Mi"
