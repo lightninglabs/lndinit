@@ -318,7 +318,7 @@ snapshot() {
 	fi
 	nodes=$(ks get "$LNDNODES" -o json 2>/dev/null | jq -c '[.items[] | {name: .metadata.name, phase: .status.phase, synced: (.status.syncedToChain // false), channels: (.status.channels // 0)}]' 2>/dev/null) || nodes=null
 	channels=$(ks get "$CHANNELS" -o json 2>/dev/null | jq -c '[.items[] | {name: .metadata.name, phase: .status.phase}]' 2>/dev/null) || channels=null
-	jq -n --arg ts "$(iso_now)" \
+	jq -cn --arg ts "$(iso_now)" \
 		--argjson nodes "${nodes:-null}" \
 		--argjson channels "${channels:-null}" \
 		--argjson soak "$(snapshot_soak)" \
@@ -419,8 +419,13 @@ phase_gate() {
 	# carries the soak counters, and fall back to the first reading when the
 	# warm-up marker is missing.
 	local first last warm
-	first=$(jq -c 'select(.soak != null)' "$snaps" | head -n1)
-	last=$(jq -c 'select(.soak != null)' "$snaps" | tail -n1)
+	# Read the whole file in jq and pick the first and last entry there.
+	# The previous "jq | head -n1" let head close the pipe after one line,
+	# jq then failed writing the rest, and under pipefail that ended the
+	# gate before any result was written, on every run with more than a
+	# few snapshots.
+	first=$(jq -cs 'map(select(.soak != null)) | first // empty' "$snaps")
+	last=$(jq -cs 'map(select(.soak != null)) | last // empty' "$snaps")
 	[[ -n "$last" ]] || die "no snapshot carries soak counters"
 	warm=$(cat "$WORKDIR/soak-at-warmup-end.json" 2>/dev/null || true)
 	[[ -n "$warm" && "$warm" != null ]] || warm=$(jq -c .soak <<<"$first")
